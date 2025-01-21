@@ -111,6 +111,13 @@ observeEvent(input$nrm_panel, {     ## when change panels
           tabPanel(
             title = "Annual comparison estimates",
             icon = icon("database"),
+            reactableOutput(outputId = paste0(tab_id, "_all_annual_comp_tbl")),
+            downloadButton(paste0(tab_id, "_all_nnual_comp_download_data"), "Download as csv"),
+            downloadButton(paste0(tab_id, "_all_nnual_comp_download_data_posteriors"), "Download posteriors as csv")
+            ),
+          tabPanel(
+            title = "comparison to most recent",
+            icon = icon("database"),
             reactableOutput(outputId = paste0(tab_id, "_annual_comp_tbl")),
             downloadButton(paste0(tab_id, "_annual_comp_download_data"), "Download as csv"),
             downloadButton(paste0(tab_id, "_annual_comp_download_data_posteriors"), "Download posteriors as csv")
@@ -231,7 +238,9 @@ observeEvent(input$nrm_panel, {     ## when change panels
                    "_",
                    shelf_selector,
                    "__",
-                   "binomial_",
+                   ## "binomial_",
+                   nrm_tab_lookup[[tab_name]]$family,
+                   "_",
                    "year_sum",
                    ".rds") 
       if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
@@ -265,7 +274,9 @@ observeEvent(input$nrm_panel, {     ## when change panels
                     "_",
                     shelf_selector,
                     "__",
-                    "binomial_",
+                    ## "binomial_",
+                   nrm_tab_lookup[[tab_name]]$family,
+                   "_",
                     "year_group_sum",
                     ".rds") 
       if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
@@ -286,6 +297,57 @@ observeEvent(input$nrm_panel, {     ## when change panels
       }
 
       ## Annual comparison summaries
+      nm3a <- paste0("www/data/modelled/",
+                    data_type,
+                    "_nrm_",
+                    nrm_selector,
+                    "_",
+                    group_selector,
+                    "_",
+                    " ",  ## ghost zone
+                    "_",
+                    " ",  ## ghost depth
+                    "_",
+                    shelf_selector,
+                    "__",
+                    ## "binomial_",
+                   nrm_tab_lookup[[tab_name]]$family,
+                   "_",
+                    "all_yearcomp_sum",
+                    ".rds") 
+      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+        if(file.exists(nm3a)) data3a <- readRDS(file = nm3a)
+        output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- reactable::renderReactable({
+          make_table(data3a, type = "all_annual_comp")
+        })
+        output[[paste0(tab_id, "_all_annual_comp_download_data")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            ## paste0("annual_comp.csv")
+            paste0(gsub("__.*", "_", basename(nm)), "all_annual_comp_summary.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            write.csv(data3a, file)
+          }
+        )
+        output[[paste0(tab_id, "_all_annual_comp_download_data_posteriors")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "all_annual_comp_posteriors.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3a)) ## |>
+              ## mutate(AIMS_REEF_NAME = reefs_selector,
+              ##        DATA_TYPE = data_type,
+              ##        )
+            write_csv(data, file)
+          }
+        )
+      }
+
+      ## Annual comparison summaries (Comparison to most recent year)
       nm3 <- paste0("www/data/modelled/",
                     data_type,
                     "_nrm_",
@@ -299,7 +361,9 @@ observeEvent(input$nrm_panel, {     ## when change panels
                     "_",
                     shelf_selector,
                     "__",
-                    "binomial_",
+                    ## "binomial_",
+                   nrm_tab_lookup[[tab_name]]$family,
+                   "_",
                     "yearcomp_sum",
                     ".rds") 
       if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
@@ -310,11 +374,26 @@ observeEvent(input$nrm_panel, {     ## when change panels
         output[[paste0(tab_id, "_annual_comp_download_data")]] <- downloadHandler(
           filename = function() {
             ## Use the selected dataset as the suggested file name
-            paste0("annual_comp.csv")
+            ## paste0("annual_comp.csv")
+            paste0(gsub("__.*", "_", basename(nm)), "annual_comp_summary.csv")
           },
           content = function(file) {
             ## Write the dataset to the `file` that will be downloaded
             write.csv(data3, file)
+          }
+        )
+        output[[paste0(tab_id, "_annual_comp_download_data_posteriors")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "annual_comp_posteriors.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3)) ## |>
+              ## mutate(AIMS_REEF_NAME = reefs_selector,
+              ##        DATA_TYPE = data_type,
+              ##        )
+            write_csv(data, file)
           }
         )
       }

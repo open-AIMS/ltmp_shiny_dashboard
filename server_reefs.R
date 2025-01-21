@@ -1,4 +1,5 @@
 
+
 reefs_tab_lookup <- list(
   "Photo-transects" =  list(
     data_type = "photo-transect",
@@ -35,10 +36,29 @@ reefs_tab_lookup <- list(
 )
 
 observeEvent(input$run_reef_refresh, {
-  config_$models <- get_config_models()
-  assign("config_", config_, envir = .GlobalEnv)
-  ## cat(file = stderr(), paste("refresh pressed:", config_$models), "\n")
   tab_name <- input$reefs_panel
+  data_types <- reefs_tab_lookup[[tab_name]]$data_type
+  ## alert(data_types)
+  if(!does_db_table_exist("models")) {
+    config_$models <- get_config_models()
+    ## cat(file = "/home/mlogan/data/con.txt", paste("refresh pressed:", config_$models), "\n", append = FALSE)
+    ## write_csv(file = "/home/mlogan/data/con.csv", config_$models)
+  } else {
+    ##   config_$models <- get_db_summary_table(method = data_types , scale = "reef")
+    ## write_csv(file = "/home/mlogan/data/con1.csv", config_$models)
+    ## config_$models <- get_db_model_data(method = data_types, scale = "reef", domain = NULL)
+    config_$models <- get_db_model_data(method = NULL, scale = "reef", domain = NULL) |>
+      filter(data_type == data_types)
+    ## write_csv(file = "/home/mlogan/data/con2.csv", config_$models)
+    ## cat(file = "/home/mlogan/data/con1.txt", paste("refresh pressed:", config_$models), "\n", append = FALSE)
+  }
+    ## alert(config_$models |>
+    ##   filter(data_type == "manta",
+    ##          data_scale == "reef",
+    ##          domain_name == "Reef 14-133"))
+  assign("config_", config_, envir = .GlobalEnv)
+  ## alert(config_$models |> filter(domain_name == "Reef 14-133"))
+  cat(file = stderr(), paste("refresh pressed:", config_$models), "\n")
   tab_id <- reefs_tab_lookup[[tab_name]]$outputId
   current_candidates <- config_$models |>
     filter(data_scale == "reef",
@@ -150,6 +170,13 @@ observeEvent(input$reefs_panel, {     ## when change panels
           tabPanel(
             title = "Annual comparison estimates",
             icon = icon("database"),
+            reactableOutput(outputId = paste0(tab_id, "_all_annual_comp_tbl")),
+            downloadButton(paste0(tab_id, "_all_annual_comp_download_data"), "Download as csv"),
+            downloadButton(paste0(tab_id, "_all_annual_comp_download_data_posteriors"), "Download posteriors as csv")
+            ),
+          tabPanel(
+            title = "Comparison to most recent",
+            icon = icon("database"),
             reactableOutput(outputId = paste0(tab_id, "_annual_comp_tbl")),
             downloadButton(paste0(tab_id, "_annual_comp_download_data"), "Download as csv"),
             downloadButton(paste0(tab_id, "_annual_comp_download_data_posteriors"), "Download posteriors as csv")
@@ -176,13 +203,17 @@ observeEvent(input$reefs_panel, {     ## when change panels
   observeEvent(c(input[[paste0(tab_id, "_reefs_selector")]]), {
     reefs_selector <- input[[paste0(tab_id, "_reefs_selector")]]
     data_type <- reefs_tab_lookup[[tab_name]]$data_type
-## alert(reefs_selector)
+ ## alert(reefs_selector)
     zones <- config_$models |>
       filter(data_type == data_type,
              data_scale == "reef",
              domain_name == reefs_selector) |>
       pull(reef_zone) |>
       unique()
+    ## alert(config_$models |>
+    ##   filter(data_type == data_type,
+    ##          data_scale == "reef",
+    ##          domain_name == reefs_selector))
     updateSelectInput(session, paste0(tab_id, "_zone_selector"),
                       choices = zones)
     depths <- config_$models |>
@@ -495,8 +526,62 @@ observeEvent(input$reefs_panel, {     ## when change panels
       }
 
      
-      
-      ## Annual comparison summaries
+      ## All Annual comparison summaries
+      nm3a <- paste0("www/data/modelled/",
+                    data_type,
+                    "_reef_",
+                    reefs_selector,
+                    "_",
+                    group_selector,
+                    "_",
+                    zone_selector,
+                    "_",
+                    depth_selector,
+                    "_",
+                    shelf_selector,
+                    "__",
+                   reefs_tab_lookup[[tab_name]]$family,
+                   "_",
+                    "all_yearcomp_sum",
+                    ".rds") 
+      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+        if(file.exists(nm3a)) data3a <- readRDS(file = nm3a)
+        output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- reactable::renderReactable({
+          make_table(data3a, type = "all_annual_comp")
+        })
+        if(file.exists(nm3a)) {
+          data3a <- data3a |>
+            mutate(AIMS_REEF_NAME = reefs_selector) |> 
+            left_join(raw_bits, by = "AIMS_REEF_NAME")
+        }
+        output[[paste0(tab_id, "_all_annual_comp_download_data")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            ## paste0("annual_comp.csv")
+            paste0(gsub("__.*", "_", basename(nm)), "all_nnual_comp_summary.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            write.csv(data3a, file)
+          }
+        )
+        output[[paste0(tab_id, "_all_annual_comp_download_data_posteriors")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "all_annual_comp_posteriors.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3a)) ## |>
+              ## mutate(AIMS_REEF_NAME = reefs_selector,
+              ##        DATA_TYPE = data_type,
+              ##        )
+            write_csv(data, file)
+          }
+        )
+      }
+
+      ## Annual comparison summaries (Comparison to most recent year)
       nm3 <- paste0("www/data/modelled/",
                     data_type,
                     "_reef_",

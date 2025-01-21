@@ -2,6 +2,7 @@
 ##data/pt_sum.csv (created by make_dashboard_table, get_data_summary)
 ## config_$models (the models that have been fit)
 
+   
 dashboard_tab_lookup <- list(
   "Photo-transects" =  list(
     data_type = "photo-transect",
@@ -120,7 +121,220 @@ dashboard_tab_lookup <- list(
   )
 )
 
+## Functions =========================================================
+get_dashboard_tab_ids <- function() {
+  tab_name <- input$dashboard_panel
+  lookup <- dashboard_tab_lookup[[tab_name]]
+  tab_id <- lookup$outputId
+  ## alert(names(input))
+  if(!is.null(input$dashboard_sql_panel)) {
+    sub_tab_name <- input$dashboard_sql_panel
+    sub_tab_id <- lookup[[sub_tab_name]]$outputId
+  } else {
+    sub_tab_name <- "sql"
+    sub_tab_id <- "sql"
+  }
+  list(tab_name = tab_name,
+       lookup = lookup,
+       tab_id =  tab_id,
+       sub_tab_name =  sub_tab_name,
+       sub_tab_id = sub_tab_id
+       )
+}
+get_dashboard_data_type <- function(ids) {
+  data_type <- ids$lookup$data_type
+  data_scale <- ids$sub_tab_id
+  list(data_type = data_type,
+       data_scale = data_scale)
+}
 
+get_db_table_data <- function(tbl_choice, data_meta) {
+  ## alert(data_meta)
+  file_exists <- FALSE 
+  data <- NULL
+  con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+  tbls <- dbListTables(con) 
+  if (1 == 2) {
+    
+  if (is.null(tbl_choice)) tbl_choice <- "summary"
+  if (tbl_choice == "data" &
+      data_meta$data_type %in% tbls) {
+    db_tbl <- paste0(data_meta$data_type)
+    ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+    data <- tbl(con, db_tbl) |>
+      head(20) |>
+      collect()
+  } else if (tbl_choice == "summary") {
+    if (data_meta$data_scale %in% c("reef", "sql") &
+        paste0(data_meta$data_type, "_sum") %in% tbls) { ## the Extract data tab
+      if (data_meta$data_scale == "sql") {
+        db_tbl <- paste0(data_meta$data_type, "_sum")
+        data <- tbl(con, db_tbl) |>
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "Sectors") |> 
+                    select(A_SECTOR = domain_name, sector_model_date = model_date,
+                           sector_model_data_hash),
+                    by = "A_SECTOR") |> 
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "nrm") |> 
+                    select(NRM_REGION = domain_name, nrm_model_date = model_date,
+                           nrm_model_data_hash),
+                    by = "NRM_REGION") |> 
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "reef") |> 
+                    select(AIMS_REEF_NAME = domain_name, reef_model_date = model_date,
+                           reef_model_data_hash),
+                    by = "AIMS_REEF_NAME") |> 
+          collect() |>
+          dplyr::select(-any_of(c("extract_data_path", "data_type", "data_scale"))) |> 
+          distinct()
+      } else {
+        db_tbl <- paste0(data_meta$data_type, "_sum")
+        data <- tbl(con, db_tbl) |>
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "reef") |> 
+                    select(AIMS_REEF_NAME = domain_name, reef_model_date = model_date,
+                           reef_model_data_hash),
+                    by = "AIMS_REEF_NAME") |> 
+          collect() |>
+          dplyr::select(-any_of(c("extract_data_path", "data_type", "data_scale"))) |> 
+          distinct()
+      }
+      ## mutate(extraction_date1 = as.POSIXct(extraction_date, format = "%Y-%m-%d %H:%M:%S"))
+      ## dbDisconnect(con)
+    } else if (paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum") %in% tbls) {  ## one of the Prepare tabs
+      db_tbl <- paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum")
+      ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+      if (data_meta$data_scale == "reef") {
+        data <- tbl(con, db_tbl) |>
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "reef") |> 
+                    select(AIMS_REEF_NAME = domain_name, reef_model_date = model_date,
+                           reef_model_data_hash),
+                    by = "AIMS_REEF_NAME") |> 
+          distinct() |> 
+          dplyr::select(-any_of(c("extract_data_path", "data_type", "data_scale"))) |> 
+          collect() 
+      }
+      if (data_meta$data_scale == "nrm") {
+        data <- tbl(con, db_tbl) |>
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "nrm") |> 
+                    select(NRM_REGION = domain_name, nrm_model_date = model_date,
+                           nrm_model_data_hash),
+                    by = "NRM_REGION") |> 
+          distinct() |> 
+          dplyr::select(-any_of(c("extract_data_path", "data_type", "data_scale"))) |> 
+          collect()
+      }
+      if (data_meta$data_scale == "sector") {
+        data <- tbl(con, db_tbl) |>
+          left_join(tbl(con, "models") |>
+                    filter(data_type == data_meta$data_type,
+                           data_scale == "Sectors") |> 
+                    select(A_SECTOR = domain_name, sector_model_date = model_date,
+                           sector_model_data_hash),
+                    by = "A_SECTOR") |> 
+          distinct() |> 
+          dplyr::select(-any_of(c("extract_data_path", "data_type", "data_scale"))) |> 
+          collect()
+      }
+      ## dbDisconnect(con)
+    }
+  }
+  }
+  dbDisconnect(con)
+  return(data)
+}
+
+make_dashboard_table <- function(data, ids) {
+  data <- data |> 
+      mutate(across(ends_with("model_data_hash"),
+                    list(flag = ~ FALSE)))
+  ## if ("extract_data_hash" %in% names(data)) {
+  if (any(str_detect(names(data), "extract_data_hash"))) {
+    data <- data |>
+      mutate(across(ends_with("model_data_hash"),
+                    ## list(flag = function(x) x == extract_data_hash)))
+                    list(flag = function(x) x == sub("model", "extract", x))))
+  }
+##   if (nrow(data) > 10)
+## ## alert(head(data |> dplyr::select(flag, ends_with("hash"))))
+## alert(head(data |> dplyr::select(flag)))
+  colstyle <- function(survey_field, extract_field = NULL, flag_field = NULL) {
+      colDef(
+        format = colFormat(datetime = TRUE),
+                    style = function(value, index) {
+                      if (is.na(value)) {
+                          list(background = "red")
+                      } else {
+                        if (!is.null(flag_field)) {
+                          if (!is.na(data[[flag_field]][index])) {
+                            if (data[[flag_field]][index]) {
+                              list(background = "lightgreen")
+                            } else {
+                              list(background = "red")
+                            }
+                          } else list(background = "red")
+                        } else {
+                          if (value < data[[survey_field]][index]) {
+                            list(background = "red")
+                          } else if (!is.null(extract_field)) {
+                            if (value < data[[extract_field]][index])
+                              list(background = "orange")
+                            else 
+                              list(background = "lightgreen")
+                          } else 
+                            list(background = "lightgreen")
+                        }
+                      }
+                    })
+    }
+    output[[paste0(ids$tab_id, "_", ids$sub_tab_id, "_tbl")]] <- reactable::renderReactable({
+      data |>
+        dplyr::select(-ends_with("_hash"), ends_with("_hash")) |> 
+        dplyr::select(-ends_with("flag")) |> 
+        reactable(
+                columns = list(
+                  survey_date = colDef(format = colFormat(datetime = TRUE)),
+                  extraction_date = colstyle(survey_field = "survey_date"),
+                  nrm_model_date = colstyle(survey_field = "survey_date",
+                                            extract_field = "extraction_date",
+                                             flag_field = "nrm_model_data_hash_flag"),
+                  sector_model_date = colstyle(survey_field = "survey_date",
+                                               extract_field = "extraction_date",
+                                             flag_field = "sector_model_data_hash_flag"),
+                  reef_model_date = colstyle(survey_field = "survey_date",
+                                             extract_field = "extraction_date",
+                                             flag_field = "reef_model_data_hash_flag")
+                ),
+                compact = TRUE, bordered = TRUE, resizable = TRUE,
+                highlight = TRUE,
+                wrap = FALSE,
+                filterable = TRUE,
+                defaultColDef = colDef(filterMethod = JS("function(rows, columnId, filterValue) {
+        return rows.filter(function(row) {
+          return row.values[columnId].indexOf(filterValue) !== -1
+        })
+      }")),
+      ##pagination = FALSE, height = 600,
+      ## defaultColDef = colDef(style = "white-space: nowrap;"),
+      theme = reactableTheme(
+        headerStyle = list(color = "white", backgroundColor = "rgb(81, 127, 185)"),
+        borderWidth = "1pt",
+        borderColor = "rgb(85, 85, 85)",
+        style = list(fontFamily = "Helvetica, Arial, sans-serif", fontSize = "10px")
+      )
+      )
+    })
+  ## }
+}
 ## Triggered events ==================================================
 
 ## Change in data_type tabs (Photo-transects, Manta tow, Juveniles,
@@ -173,44 +387,67 @@ observeEvent(input$dashboard_panel, {     ## when change panels
                                 ),
                             ),
                      column(width = 5,
-                            "Step 1: Run sql to extract data",
-                            br(),
-                            box(
-                              title =
+                            tabsetPanel(
+                              id = "dashboard_auto_run_panel",
+                              tabPanel(
+                                title = "Auto",
+                                box(
+                                  title =
                                     span(
                                       icon("info", style = "margin-right: 10px;"),
                                       paste0("SQL (~/dashboard/data/", lookup$sql, ")"),
-                                      actionButton("run_sql", "Run",
+                                      actionButton("run_auto", "Run",
                                                    style = "margin-left:auto; padding-top:0px; padding-bottom:0px; position:absolute;right:10px;",
                                                    icon =  icon("play"))
                                     ),
-                              width = 12,
-                              solidHeader = TRUE,
-                              status = "info",
-                              style = "font-family:monospace;",
-                              htmltools::includeMarkdown(paste0("data/", lookup$sql)),
-                              ),
-                            ## tags$a(href="data/pt1.csv", "Download CSV", download=NA),
-                            br(),
-                            "Step 2: Run post-export processing",
-                            br(),
-                            box(
-                              title =
-                                    span(
-                                      icon("info", style = "margin-right: 10px;"),
-                                      "Post-export R script",
-                                      actionButton("run_process", "Run",
-                                                   style = "margin-left:auto; padding-top:0px; padding-bottom:0px; position:absolute;right:10px;",
-                                                   class = "btn-enabled"),
+                                  width = 12,
+                                  solidHeader = TRUE,
+                                  status = "info",
+                                  htmltools::includeMarkdown("md/dashboard_extract_auto.md")
+                                )
+                            ),
+                            tabPanel(
+                              title = "Manual",
+                              "Step 1: Run sql to extract data",
+                              br(),
+                              box(
+                                title =
+                                  span(
+                                    icon("info", style = "margin-right: 10px;"),
+                                    paste0("SQL (~/dashboard/data/", lookup$sql, ")"),
+                                    actionButton("run_sql", "Run",
+                                                 style = "margin-left:auto; padding-top:0px; padding-bottom:0px; position:absolute;right:10px;",
+                                                 icon =  icon("play"))
+                                  ),
+                                width = 12,
+                                solidHeader = TRUE,
+                                status = "info",
+                                style = "font-family:monospace;",
+                                htmltools::includeMarkdown(paste0("data/", lookup$sql)),
+                                ),
+                              ## tags$a(href="data/pt1.csv", "Download CSV", download=NA),
+                              br(),
+                              "Step 2: Run post-export processing",
+                              br(),
+                              box(
+                                title =
+                                  span(
+                                    icon("info", style = "margin-right: 10px;"),
+                                    "Post-export R script",
+                                    actionButton("run_process", "Run",
+                                                 style = "margin-left:auto; padding-top:0px; padding-bottom:0px; position:absolute;right:10px;",
+                                                 class = "btn-enabled"),
                                     ),
-                              width = 12,
-                              solidHeader = TRUE,
-                              status = "info",
-                              "This step will run an external R script that will perform a small amount of post-processing to ensure that the extracted data is compatible with the format and structure of the extracts produced by the production dashboard.  I should probably just wrap this step up into the back end of the sql extraction since without it, the rest of the processing cannot take place.",
-                              ## htmltools::includeMarkdown(paste0("data/", lookup$sql)),
+                                width = 12,
+                                solidHeader = TRUE,
+                                status = "info",
+                                "This step will run an external R script that will perform a small amount of post-processing to ensure that the extracted data is compatible with the format and structure of the extracts produced by the production dashboard.  I should probably just wrap this step up into the back end of the sql extraction since without it, the rest of the processing cannot take place.",
+                                ## htmltools::includeMarkdown(paste0("data/", lookup$sql)),
+                                ),
                               ),
                             ),
                      ),
+                   ),
                    tabPanel(
                      title = "Prepare Sectors",
                      column(width = 7,
@@ -439,16 +676,23 @@ observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
   ## if (!is.null(tbl)) {
   ##   make_dashboard_table(tbl, ids) 
   ## }
-      tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
-
-      if (!is.null(tbl)) {
-        make_dashboard_table(tbl, ids) 
-      }
+  ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+  tbl_choice <- input$sql_tbl_choice
+  if (is.null(tbl_choice)) tbl_choice <- "summary"
+  if (tbl_choice == "data") {
+    tbl <- make_dashboard_data(method = data_meta$data_type,
+                               scale = data_meta$data_scale)
+  } else {
+    tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                  scale = data_meta$data_scale)
+  }
+  if (!is.null(tbl)) {
+    make_dashboard_table(tbl, ids) 
+  }
 
   if (1 == 1) {
-    
     if (data_meta$data_scale == "reef") {
-      candidates <- get_candidates_to_select_from(data_meta, "AIMS_REEF_NAME")
+      candidates <- get_candidates_to_select_from(data_meta, "domain_name")
       ## if (file.exists(rds_file)) {
         ## data <- readRDS(file = rds_file) 
         ## dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices <-
@@ -461,7 +705,7 @@ observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
       ## }
     }
     if (data_meta$data_scale == "nrm") {
-      candidates <- get_candidates_to_select_from(data_meta, "NRM_REGION")
+      candidates <- get_candidates_to_select_from(data_meta, "domain_name")
       ## if (file.exists(rds_file)) {
         ## data <- readRDS(file = rds_file) 
         ## dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices <-
@@ -474,7 +718,8 @@ observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
       ## }
     }
     if (data_meta$data_scale == "sector") {
-      candidates <- get_candidates_to_select_from(data_meta, "A_SECTOR")
+      ## candidates <- get_candidates_to_select_from(data_meta, "A_SECTOR")
+      candidates <- get_candidates_to_select_from(data_meta, "domain_name")
       ## if (file.exists(rds_file)) {
         ## data <- readRDS(file = rds_file) 
         ## dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices <-
@@ -486,10 +731,10 @@ observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
       ## }
     }
   }
-  tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
-  if (!is.null(tbl)) {
-    make_dashboard_table(tbl, ids) 
-  }
+  ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+  ## if (!is.null(tbl)) {
+  ##   make_dashboard_table(tbl, ids) 
+  ## }
 }
 )
 
@@ -511,7 +756,19 @@ observeEvent(c(input$refresh_summary_tbl), {
   ids <- get_dashboard_tab_ids()  
   data_meta <- get_dashboard_data_type(ids)  
 
-  tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+  tbl_choice <- input$sql_tbl_choice
+  if (is.null(tbl_choice)) tbl_choice <- "summary"
+  if (tbl_choice == "data") {
+    tbl <- make_dashboard_data(method = data_meta$data_type,
+                               scale = data_meta$data_scale)
+  } else {
+    tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                  scale = data_meta$data_scale)
+  }
+  if (!is.null(tbl)) {
+    make_dashboard_table(tbl, ids) 
+  }
+  ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
   if (!is.null(tbl)) {
     make_dashboard_table(tbl, ids) 
   }
@@ -537,121 +794,34 @@ ignoreInit = TRUE
 observeEvent(c(input$sql_tbl_choice), {
   ids <- get_dashboard_tab_ids()  
   data_meta <- get_dashboard_data_type(ids)  
-  ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-  tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+  tbl <- NULL
+  if (input$sql_tbl_choice == "data") {
+    tbl <- make_dashboard_data(method = data_meta$data_type,
+                               scale = data_meta$data_scale) 
+  } else {
+    tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                  scale = data_meta$data_scale)
+  }
+  ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
   if (!is.null(tbl)) {
     make_dashboard_table(tbl, ids) 
   }
 }
 )
 
+## Run the sql, post-process and preparation stages in one hit
+observeEvent(input$run_auto, {
+  run_auto()
+})
+
 ## Run the SQL querie
 observeEvent(input$run_sql, {
-  ## get the id's of the data_type and routine tabs
-  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
-  ## ## get the names of various files that can be derived from the sql file name
-  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
-  ids <- get_dashboard_tab_ids()  
-  data_meta <- get_dashboard_data_type(ids)  
-  ## prepare the ui for an external process
-  ## alert("here")
-  cat(paste("\nExtracting ",ids$tab_name, " from Oracle\n======================================\n"),
-      file = config_$dashboard_log, append = TRUE)
-  process_ui_start(data_meta, id = "run_sql")
-
-  ## file.copy(from = config_$dashboard_log,
-  ##           to = gsub(".log", ".old", config_$dashboard_log),
-  ##           overwrite = TRUE)
-  db <- readRDS(config_$db_file)
-  ## alert(ids)
-  sql_file <- ids$lookup$sql
-  ## alert(db[[data_meta$data_type]])
-  csv_file <- db[[data_meta$data_type]]$data_file
-  process <- processx::process$new("java", 
-                                   args = c("-jar",
-                                            "../dev/dbExport.jar",
-                                            paste0("data/", sql_file),
-                                            csv_file,
-                                            ## paste0(config_$data_path, csv_file),
-                                            "reef",
-                                            "reefmon"),
-                                   stdout = config_$dashboard_log
-                                   )
-  timer_observer <- observe({
-    invalidateLater(1000)
-    if(isolate(process$is_alive()) == FALSE) {
-      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
-                  file2 = config_$dashboard_log)
-      process_ui_end(data_meta, "run_sql")
-
-      cat("\nGenerating summary table from export\n======================================\n",
-          file = config_$dashboard_log, append = TRUE)
-
-      create_db_table_from_extract(config_$db_path, data_meta$data_type, csv_file)
-      create_db_summary(config_$db_path, data_meta$data_type,ids$sub_tab_id, csv_file) 
-      tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
-
-      if (!is.null(tbl)) {
-        make_dashboard_table(tbl, ids) 
-      }
-
-      ## out <- system(sprintf("sqlite3 %s 'DROP TABLE IF EXISTS %s';",
-      ##                       config_$db_path, data_meta$data_type),
-      ##               wait = TRUE, intern = TRUE)
-      ## out <- system(sprintf("sqlite3 %s '.mode csv' '.headers on' '.import %s %s';",
-      ##                       config_$db_path, csv_file, data_meta$data_type),
-      ##               wait = TRUE, intern = TRUE)
-      ## ## out <- system(sprintf("sqlite3 %s 'DROP TABLE IF EXISTS ", data_meta$data_type, "; ',
-      ## ##               '.mode csv' '.headers on' '.import %s %s';",
-      ## ##                       config_$db_path, csv_file, data_meta$data_type),
-      ## ##               wait = TRUE, intern = TRUE)
-
-      ## db_tbl <- paste0(data_meta$data_type, "_sum")
-      ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-      ## tbl(con, data_meta$data_type) |>
-      ##   mutate(SURVEY_DATE1 = sql("datetime(SURVEY_DATE, 'localtime')")) |> 
-      ##   group_by(NRM_REGION) |>
-      ##   summarise(SURVEY_DATE1 = max(SURVEY_DATE1)) |> 
-      ##   compute(db_tbl, temporary = FALSE, overwrite = TRUE)
-      ## dbDisconnect(con)
-
-      ## get_data_summary(data_meta, csv_file, db[[data_meta$data_type]]$summary_file)
-      ## join_extracted_summary_to_model_meta(db[[data_meta$data_type]]$summary_file, data_meta)
-      ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-      ## if (!is.null(tbl)) {
-      ##   make_dashboard_table(tbl, ids) 
-      ## }
-      timer_observer$destroy()
-    }
-  }) 
-  }
-)
+  run_sql()
+})
 
 ## Run the post-extract script
 observeEvent(input$run_process, {
-  ids <- get_dashboard_tab_ids()  
-  data_meta <- get_dashboard_data_type(ids)  
-  data_type <- data_meta$data_type
-  db <- readRDS(config_$db_file)
-  csv_file <- db[[data_meta$data_type]]$data_file
-  ## prepare the ui for an external process
-  process_ui_start(data_meta, id = "run_process")
-  process <- processx::process$new("Rscript", 
-                                   args = c("../dev/R/process_db_extract.R",
-                                            paste0("--method=", data_type),
-                                            "--purpose=post-process",
-                                            paste0("--csv_file=",csv_file)),
-                                   stdout = config_$dashboard_log
-                                   )
-  timer_observer <- observe({
-    invalidateLater(1000)
-    if(isolate(process$is_alive()) == FALSE) {
-      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
-                  file2 = config_$dashboard_log)
-      process_ui_end(data_meta, "run_process")
-      timer_observer$destroy()
-    }
-  }) 
+  run_process()
 }
 )
 
@@ -675,52 +845,7 @@ observeEvent(c(input$reef_tbl_choice), {
 
 ## Run the prepare reefs for modelling script
 observeEvent(input$run_prepare_reefs, {
-  ids <- get_dashboard_tab_ids()  
-  data_meta <- get_dashboard_data_type(ids)  
-  data_type <- data_meta$data_type
-  db <- readRDS(config_$db_file)
-  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
-  ## get the id's of the data_type and routine tabs
-  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
-  ## get the names of various files that can be derived from the sql file name
-  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
-  ## prepare the ui for an external process
-  process_ui_start(data_meta, id = "run_prepare_reefs")
-  process <- processx::process$new("Rscript", 
-                                   args = c("../dev/R/process_db_extract.R",
-                                            paste0("--method=", data_type),
-                                            "--purpose=make_reefs",
-                                            paste0("--rds_file=", rds_file)),
-                                   stdout = config_$dashboard_log
-                                   )
-  timer_observer <- observe({
-    invalidateLater(1000)
-    if(isolate(process$is_alive()) == FALSE) {
-      ## build_summary_data(data_meta)
-      ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-      ## if (!is.null(tbl)) {
-      ##   make_dashboard_table(tbl, ids) 
-      ## }
-
-      ## rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$summary_file)
-      ## ## alert(rds_file)
-      ## ## alert(file.exists(rds_file))
-      ## if (file.exists(rds_file)) {
-      ##   data <- readRDS(file = rds_file) 
-      ##   dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices <-
-      ##     sort(unique(data$reef))
-      ##   assign("dashboard_tab_lookup", dashboard_tab_lookup, envir = .GlobalEnv)
-      ##   ## alert(sort(unique(data$reef)))
-      ##   updateSelectInput(inputId = paste0(data_meta$data_type, "_reef_model_choice"),
-      ##                     choices = c("all", sort(unique(data$reef)) 
-      ##                                 ))
-      ## }
-      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
-                  file2 = config_$dashboard_log)
-      process_ui_end(data_meta, "run_prepare_reefs")
-      timer_observer$destroy()
-    }
-  }) 
+  run_prepare_reefs()
 }
 )
 
@@ -748,22 +873,64 @@ observeEvent(input$run_fit_reefs, {
       invalidateLater(1000)
       if(isolate(process$is_alive()) == FALSE) {
         ## alert("Made it")
-        config_$models <- get_config_models()
-        ## put those models into database
-        con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-        copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
-        dbDisconnect(con)
+ ##        alert(names(get_config_models()))
+ ## bb <- get_db_model_data(method = data_type,
+ ##                                      scale = "reef", domain = reefs)
+ ##        alert(bb)
+        ## config_$models <-
+        ##   ## get basic data on fitted models
+        ##   get_config_models() |>
+        ##   ## dplyr::select(-any_of("reef_model_data_hash")) |> 
+        ##   ## ## get any info from the database
+        ##   ## left_join(get_db_model_data(method = data_type,
+        ##   ##                             scale = "reef", domain = reefs),
+        ##   ##           by = c("data_type" = "data_type",
+        ##   ##                  "data_scale" = "data_scale",
+        ##   ##                  "domain_name" = "domain_name")) |> 
+        ##   ## ## get the hash of data
+        ##   left_join(make_data_hash(method = data_type, scale = "reef", domain = reefs) |>
+        ##             dplyr::rename("reef_model_data_hash" = "model_data_hash"),
+        ##             by = c("data_type", "data_scale", "domain_name")) |>
+        ##   mutate(reef_model_data_hash = coalesce(reef_model_data_hash.y,
+        ##                                          reef_model_data_hash.x)) |>
+        ##   dplyr::select(-any_of(c("reef_model_data_hash.x", "reef_model_data_hash.y")))
+        ## ## alert(names(config_$models))
+        ## ## alert(head(config_$models |> dplyr::select(domain_name, reef_model_data_hash) |> dplyr::select(domain_name %in% c("AUKANE", "AUREED"))))
+        ## ## put those models into database
+        ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+        ## copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
+        ## dbDisconnect(con)
+
+        update_db_model_hash(method = data_type, scale = "reef", domain = reefs)
         tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
         if (!is.null(tbl)) {
           make_dashboard_table(tbl, ids) 
         }
-
         process_ui_end(data_meta, "run_fit_reefs")
         timer_observer$destroy()
       }
     }) 
 }
 )
+
+make_data_hash <- function(method, scale, domain) {
+  data_paths <- paste0(config_$data_path, method)
+  fls <- list.files(data_paths,
+                    recursive = TRUE, full.names = TRUE)
+  fls_wch <- str_detect(fls, ".*/process/[^/]*/[^/]*/[^/]*/reef/.*.csv$") 
+  models <- tibble(path = unique(fls[fls_wch])) |>
+    mutate(data_type = str_replace(path, ".*/data/([^/]*)/.*", "\\1")) |>
+    mutate(data_scale = str_replace(path, ".*/process/[^/]*/[^/]*/[^/]*/([^/]*)/.*", "\\1")) |>
+    mutate(domain_name = str_replace(path, ".*/process/[^/]*/[^/]*/[^/]*/[^/]*/([^/]*)/.*", "\\1")) |>
+    mutate(model_data_hash = map(.x = path,
+                           .f =  ~ digest(.x, algo = "sha256", file = TRUE))) |>
+    unnest(model_data_hash) |> 
+    filter(data_type == method,
+           data_scale == scale
+           ) 
+  if (!is.null(domain)) models <- models |> filter(domain_name == domain)
+  models
+}
 
 
 update_summary_data <- function(data_meta) {
@@ -791,41 +958,7 @@ update_summary_data <- function(data_meta) {
 
 ## Run the prepare NRMs for modelling script
 observeEvent(input$run_prepare_nrm, {
-  ## ## get the id's of the data_type and routine tabs
-  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
-  ## ## get the names of various files that can be derived from the sql file name
-  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
-  ## ## prepare the ui for an external process
-  ids <- get_dashboard_tab_ids()  
-  data_meta <- get_dashboard_data_type(ids)  
-  data_type <- data_meta$data_type
-  db <- readRDS(config_$db_file)
-  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
-  process_ui_start(data_meta, id = "run_prepare_nrm")
-    process <- processx::process$new("Rscript", 
-                                     args = c("../dev/R/process_db_extract.R",
-                                              paste0("--method=", data_type),
-                                              "--purpose=make_nrm",
-                                              paste0("--rds_file=", rds_file)),
-                                     stdout = config_$dashboard_log
-                                     ## stderr =  config_$dashboard_log
-                                     )
-    timer_observer <- observe({
-      invalidateLater(1000)
-      if(isolate(process$is_alive()) == FALSE) {
-        ## build_summary_data(data_meta)
-        ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-        ## if (!is.null(tbl)) {
-        ##   make_dashboard_table(tbl, ids) 
-        ## }
-        file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
-                    file2 = config_$dashboard_log)
-        process_ui_end(data_meta, "run_prepare_nrm")
-        timer_observer$destroy()
-      }
-    }) 
-    ## config_$models <- get_config_models()
-    ## assign("config_", config_, envir = .GlobalEnv)
+  run_prepare_nrm()
 }
 )
 
@@ -890,10 +1023,19 @@ observeEvent(input$run_fit_nrm, {
       if(isolate(process$is_alive()) == FALSE) {
         ## alert("here")
         config_$models <- get_config_models()
-        con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-        copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
-        dbDisconnect(con)
-        tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+        ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+        ## copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
+        ## dbDisconnect(con)
+        update_db_model_hash(method = data_type, scale = "nrm", domain = nrms)
+        ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+        tbl_choice <- input$sql_tbl_choice
+        if (tbl_choice == "data") {
+          tbl <- make_dashboard_data(method = data_meta$data_type,
+                                     scale = data_meta$data_scale)
+        } else {
+          tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                        scale = data_meta$data_scale)
+        }
         if (!is.null(tbl)) {
           make_dashboard_table(tbl, ids) 
         }
@@ -926,41 +1068,7 @@ observeEvent(input$run_fit_nrm, {
 
 ## Run the prepare SECTORs for modelling script
 observeEvent(input$run_prepare_sector, {
-  ids <- get_dashboard_tab_ids()  
-  data_meta <- get_dashboard_data_type(ids)  
-  data_type <- data_meta$data_type
-  db <- readRDS(config_$db_file)
-  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
-  ## ## get the id's of the data_type and routine tabs
-  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
-  ## ## get the names of various files that can be derived from the sql file name
-  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
-  ## ## prepare the ui for an external process
-  process_ui_start(data_meta, id = "run_prepare_sector")
-    process <- processx::process$new("Rscript", 
-                                     args = c("../dev/R/process_db_extract.R",
-                                              paste0("--method=", data_type),
-                                              "--purpose=make_sectors",
-                                              paste0("--rds_file=", rds_file)),
-                                     stdout = config_$dashboard_log
-                                     ## stderr =  config_$dashboard_log
-                                     )
-    timer_observer <- observe({
-      invalidateLater(1000)
-      if(isolate(process$is_alive()) == FALSE) {
-        ## build_summary_data(data_meta)
-        ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-        ## if (!is.null(tbl)) {
-        ##   make_dashboard_table(tbl, ids) 
-        ## }
-        file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
-                    file2 = config_$dashboard_log)
-        process_ui_end(data_meta, "run_prepare_sector")
-        timer_observer$destroy()
-      }
-    }) 
-  ## config_$models <- get_config_models()
-  ## assign("config_", config_, envir = .GlobalEnv)
+  run_prepare_sector()
 }
 )
 
@@ -969,35 +1077,56 @@ observeEvent(input$run_fit_sector, {
   ids <- get_dashboard_tab_ids()  
   data_meta <- get_dashboard_data_type(ids)  
   data_type <- data_meta$data_type
+  data_scale <- data_meta$data_scale
   ## ## get the id's of the data_type and routine tabs
   ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
   ## ## get the names of various files that can be derived from the sql file name
   ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
   sectors <- input[[paste0(data_type, "_sector_model_choice")]]
   if ("all" %in% sectors) {
-    sectors <- get_candidates_to_select_from(data_meta, "A_SECTOR")
+    sectors <- get_candidates_to_select_from(data_meta, "domain_name")
     ## dashboard_tab_lookup <- get("dashboard_tab_lookup", envir = .GlobalEnv)
     ## sectors <- dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices
   }
   
   process_ui_start(data_meta, id = "run_fit_sector")
   process <- processx::process$new("Rscript", 
-                                   args = c("../dev/R/run_models.R",
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=fit"),
                                             paste0("--method=", data_type),
-                                            paste0("--scale=sectors"),
+                                            paste0("--scale=", data_scale),
                                             paste0("--domain=", sectors),
-                                            paste0("--log=", config_$dashboard_log)),
-                                   stdout = config_$dashboard_log
-                                   ## stderr =  config_$dashboard_log
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
                                    )
+  ## process <- processx::process$new("Rscript", 
+  ##                                  args = c("../dev/R/run_models.R",
+  ##                                           paste0("--method=", data_type),
+  ##                                           paste0("--scale=sectors"),
+  ##                                           paste0("--domain=", sectors),
+  ##                                           paste0("--log=", config_$dashboard_log)),
+  ##                                  stdout = config_$dashboard_log
+  ##                                  ## stderr =  config_$dashboard_log
+  ##                                  )
     timer_observer <- observe({
       invalidateLater(1000)
       if(isolate(process$is_alive()) == FALSE) {
-        config_$models <- get_config_models()
-        con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-        copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
-        dbDisconnect(con)
-        tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+        ## config_$models <- get_config_models()
+        ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+        ## copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
+        ## dbDisconnect(con)
+        ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+        update_db_model_hash(method = data_type, scale = "sector", domain = sectors)
+        tbl_choice <- input$sql_tbl_choice
+        if (is.null(tbl_choice)) tbl_choice <- "summary"
+        if (tbl_choice == "data") {
+          tbl <- make_dashboard_data(method = data_meta$data_type,
+                                     scale = data_meta$data_scale)
+        } else {
+          tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                        scale = data_meta$data_scale)
+        }
         if (!is.null(tbl)) {
           make_dashboard_table(tbl, ids) 
         }
@@ -1016,6 +1145,8 @@ observeEvent(input$run_fit_sector, {
           ## db <- readRDS(config_$db_file)
           ## summary_file <- db[[data_meta$data_type]]$summary_file
           ## join_extracted_summary_to_model_meta(summary_file, data_meta)
+        file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                    file2 = config_$dashboard_log)
         process_ui_end(data_meta, "run_fit_sector")
         timer_observer$destroy()
       }
@@ -1129,6 +1260,354 @@ output$log_out <- renderText( {
   }
 }
 )
+
+
+run_sql <- function() {
+  config_$locked <- TRUE
+  assign("config_", config_, env = .GlobalEnv)
+  ## alert(config_$locked)
+  ## get the id's of the data_type and routine tabs
+  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
+  ## ## get the names of various files that can be derived from the sql file name
+  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
+  ids <- get_dashboard_tab_ids()  
+  data_meta <- get_dashboard_data_type(ids)  
+  data_type <- data_meta$data_type
+  ## prepare the ui for an external process
+  cat(paste("\nExtracting ",ids$tab_name, " from Oracle\n======================================\n"),
+      file = config_$dashboard_log, append = TRUE)
+  process_ui_start(data_meta, id = "run_sql")
+
+  db <- readRDS(config_$db_file)
+  sql_file <- ids$lookup$sql
+  csv_file <- db[[data_meta$data_type]]$data_file
+  process <- processx::process$new("Rscript", 
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=sql"),
+                                            paste0("--method=", data_type),
+                                            paste0("--log=../", config_$dashboard_log)),
+                                            ## paste0("--log=../", config_$dashboard_log),
+                                            ## paste0(">> ../", sub("log", "old", config_$dashboard_log), " 2>&1")),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
+                                   )
+  timer_observer <- observe({
+    invalidateLater(1000)
+    if(isolate(process$is_alive()) == FALSE) {
+      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                  file2 = config_$dashboard_log)
+      process_ui_end(data_meta, "run_sql")
+
+      cat("\nGenerating summary table from export\n======================================\n",
+          file = config_$dashboard_log, append = TRUE)
+
+      tbl_choice <- input$sql_tbl_choice
+      if (is.null(tbl_choice)) tbl_choice <- "summary"
+      if (tbl_choice == "data") {
+        tbl <- make_dashboard_data(method = data_meta$data_type,
+                                   scale = data_meta$data_scale)
+      } else {
+        tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                      scale = data_meta$data_scale)
+      }
+
+      if (!is.null(tbl)) {
+        make_dashboard_table(tbl, ids) 
+      }
+
+      timer_observer$destroy()
+      config_$locked <- FALSE
+      assign("config_", config_, env = .GlobalEnv)
+    }
+  }) 
+}
+run_process <- function() {
+  ids <- get_dashboard_tab_ids()  
+  data_meta <- get_dashboard_data_type(ids)  
+  data_type <- data_meta$data_type
+  db <- readRDS(config_$db_file)
+  csv_file <- db[[data_meta$data_type]]$data_file
+  ## prepare the ui for an external process
+  process_ui_start(data_meta, id = "run_process")
+  process <- processx::process$new("Rscript", 
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=post-process"),
+                                            paste0("--method=", data_type),
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
+                                   )
+  ## process <- processx::process$new("Rscript", 
+  ##                                  args = c("../dev/R/process_db_extract.R",
+  ##                                           paste0("--method=", data_type),
+  ##                                           "--purpose=post-process",
+  ##                                           paste0("--csv_file=",csv_file)),
+  ##                                  stdout = config_$dashboard_log
+  ##                                  )
+  timer_observer <- observe({
+    invalidateLater(1000)
+    if(isolate(process$is_alive()) == FALSE) {
+      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                  file2 = config_$dashboard_log)
+      process_ui_end(data_meta, "run_process")
+      timer_observer$destroy()
+    }
+  }) 
+}
+
+run_prepare_reefs <- function() {
+  ids <- get_dashboard_tab_ids()  
+  data_meta <- get_dashboard_data_type(ids)  
+  data_type <- data_meta$data_type
+  data_scale <- data_meta$data_scale
+  db <- readRDS(config_$db_file)
+  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
+  ## get the id's of the data_type and routine tabs
+  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
+  ## get the names of various files that can be derived from the sql file name
+  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
+  ## prepare the ui for an external process
+  process_ui_start(data_meta, id = "run_prepare_reefs")
+  process <- processx::process$new("Rscript", 
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=prepare"),
+                                            paste0("--method=", data_type),
+                                            paste0("--scale=", data_scale),
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
+                                   )
+  ## process <- processx::process$new("Rscript", 
+  ##                                  args = c("../dev/R/process_db_extract.R",
+  ##                                           paste0("--method=", data_type),
+  ##                                           "--purpose=make_reefs",
+  ##                                           paste0("--rds_file=", rds_file)),
+  ##                                  stdout = config_$dashboard_log
+  ##                                  )
+  timer_observer <- observe({
+    invalidateLater(1000)
+    if(isolate(process$is_alive()) == FALSE) {
+
+      cat("\nGenerating summary table from export\n======================================\n",
+          file = config_$dashboard_log, append = TRUE)
+
+      tbl_choice <- input$sql_tbl_choice
+      if (is.null(tbl_choice)) tbl_choice <- "summary"
+      if (tbl_choice == "data") {
+        tbl <- make_dashboard_data(method = data_meta$data_type,
+                                   scale = data_meta$data_scale)
+      } else {
+        tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                      scale = data_meta$data_scale)
+      }
+
+      if (!is.null(tbl)) {
+        make_dashboard_table(tbl, ids) 
+      }
+      ## ## Update data hash in data summary table
+      ## data_hashes <- make_data_hash(method = data_type, scale = "reef", domain = NULL) |>
+      ##   dplyr::rename("extract_data_hash" = "model_data_hash",
+      ##                 "extract_data_path" = "path")
+
+      ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+      ## db_sum_tbl <- paste0(data_type, "_sum")
+      ## tb <- tbl(con, db_sum_tbl) |>
+      ##   collect() |> 
+      ##   dplyr::select(-any_of(c("extract_data_hash", "extract_data_path",
+      ##                           "data_type", "data_scale"))) |> 
+      ##   left_join(data_hashes, by = c("AIMS_REEF_NAME" = "domain_name")) 
+      ## copy_to(con, tb, db_sum_tbl, temporary = FALSE, overwrite = TRUE)
+      ##   ## compute(db_sum_tbl, temporary = FALSE, overwrite = TRUE, copy = TRUE)
+      ## dbDisconnect(con)
+
+      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                  file2 = config_$dashboard_log)
+      process_ui_end(data_meta, "run_prepare_reefs")
+      timer_observer$destroy()
+    }
+  }) 
+}
+run_prepare_nrm <- function() {
+  ## ## get the id's of the data_type and routine tabs
+  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
+  ## ## get the names of various files that can be derived from the sql file name
+  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
+  ## ## prepare the ui for an external process
+  ids <- get_dashboard_tab_ids()  
+  data_meta <- get_dashboard_data_type(ids)  
+  data_type <- data_meta$data_type
+  data_scale <- data_meta$data_scale
+  db <- readRDS(config_$db_file)
+  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
+  process_ui_start(data_meta, id = "run_prepare_nrm")
+  process <- processx::process$new("Rscript", 
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=prepare"),
+                                            paste0("--method=", data_type),
+                                            paste0("--scale=", data_scale),
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
+                                   )
+    ## process <- processx::process$new("Rscript", 
+    ##                                  args = c("../dev/R/process_db_extract.R",
+    ##                                           paste0("--method=", data_type),
+    ##                                           "--purpose=make_nrm",
+    ##                                           paste0("--rds_file=", rds_file)),
+    ##                                  stdout = config_$dashboard_log
+    ##                                  ## stderr =  config_$dashboard_log
+    ##                                  )
+    timer_observer <- observe({
+      invalidateLater(1000)
+      if(isolate(process$is_alive()) == FALSE) {
+      cat("\nGenerating summary table from export\n======================================\n",
+          file = config_$dashboard_log, append = TRUE)
+
+      tbl_choice <- input$sql_tbl_choice
+      if (is.null(tbl_choice)) tbl_choice <- "summary"
+      if (tbl_choice == "data") {
+        tbl <- make_dashboard_data(method = data_meta$data_type,
+                                   scale = data_meta$data_scale)
+      } else {
+        tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                      scale = data_meta$data_scale)
+      }
+
+      if (!is.null(tbl)) {
+        make_dashboard_table(tbl, ids) 
+      }
+        ## build_summary_data(data_meta)
+        ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
+        ## if (!is.null(tbl)) {
+        ##   make_dashboard_table(tbl, ids) 
+        ## }
+        file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                    file2 = config_$dashboard_log)
+        process_ui_end(data_meta, "run_prepare_nrm")
+        timer_observer$destroy()
+      }
+    }) 
+    ## config_$models <- get_config_models()
+    ## assign("config_", config_, envir = .GlobalEnv)
+}
+run_prepare_sector <- function() {
+  ids <- get_dashboard_tab_ids()  
+  data_meta <- get_dashboard_data_type(ids)  
+  data_type <- data_meta$data_type
+  data_scale <- data_meta$data_scale
+  db <- readRDS(config_$db_file)
+  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
+  ## ## get the id's of the data_type and routine tabs
+  ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
+  ## ## get the names of various files that can be derived from the sql file name
+  ## list2env(get_dashboard_file_names(lookup), env = .GlobalEnv)  
+  ## ## prepare the ui for an external process
+  process_ui_start(data_meta, id = "run_prepare_sector")
+  process <- processx::process$new("Rscript", 
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=prepare"),
+                                            paste0("--method=", data_type),
+                                            paste0("--scale=", data_scale),
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
+                                   )
+    ## process <- processx::process$new("Rscript", 
+    ##                                  args = c("../dev/R/process_db_extract.R",
+    ##                                           paste0("--method=", data_type),
+    ##                                           "--purpose=make_sectors",
+    ##                                           paste0("--rds_file=", rds_file)),
+    ##                                  stdout = config_$dashboard_log
+    ##                                  ## stderr =  config_$dashboard_log
+    ##                                  )
+  timer_observer <- observe({
+    invalidateLater(1000)
+    if(isolate(process$is_alive()) == FALSE) {
+      tbl_choice <- input$sql_tbl_choice
+      if (is.null(tbl_choice)) tbl_choice <- "summary"
+      if (tbl_choice == "data") {
+        tbl <- make_dashboard_data(method = data_meta$data_type,
+                                   scale = data_meta$data_scale)
+      } else {
+        tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                      scale = data_meta$data_scale)
+      }
+
+      if (!is.null(tbl)) {
+        make_dashboard_table(tbl, ids) 
+      }
+      ## build_summary_data(data_meta)
+      ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
+      ## if (!is.null(tbl)) {
+      ##   make_dashboard_table(tbl, ids) 
+      ## }
+      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                  file2 = config_$dashboard_log)
+      process_ui_end(data_meta, "run_prepare_sector")
+      timer_observer$destroy()
+    }
+  }) 
+  ## config_$models <- get_config_models()
+  ## assign("config_", config_, envir = .GlobalEnv)
+  
+}
+run_auto <- function() {
+  ## alert("auto")
+  ids <- get_dashboard_tab_ids()  
+  data_meta <- get_dashboard_data_type(ids)  
+  data_type <- data_meta$data_type
+  db <- readRDS(config_$db_file)
+  rds_file <- gsub(".csv", ".rds", db[[data_meta$data_type]]$data_file)
+  process_ui_start(data_meta, id = "run_prepare_sector")
+
+  process <- processx::process$new("Rscript", 
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=sql,post-process,prepare"),
+                                            paste0("--method=", data_type),
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
+                                   )
+    ## process <- processx::process$new("Rscript", 
+    ##                                  args = c("../dev/R/process_db_extract.R",
+    ##                                           paste0("--method=", data_type),
+    ##                                           "--purpose=make_sectors",
+    ##                                           paste0("--rds_file=", rds_file)),
+    ##                                  stdout = config_$dashboard_log
+    ##                                  ## stderr =  config_$dashboard_log
+    ##                                  )
+  timer_observer <- observe({
+    invalidateLater(1000)
+    if(isolate(process$is_alive()) == FALSE) {
+      tbl_choice <- input$sql_tbl_choice
+      if (is.null(tbl_choice)) tbl_choice <- "summary"
+      if (tbl_choice == "data") {
+        tbl <- make_dashboard_data(method = data_meta$data_type,
+                                   scale = data_meta$data_scale)
+      } else {
+        tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                      scale = data_meta$data_scale)
+      }
+
+      if (!is.null(tbl)) {
+        make_dashboard_table(tbl, ids) 
+      }
+      ## build_summary_data(data_meta)
+      ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
+      ## if (!is.null(tbl)) {
+      ##   make_dashboard_table(tbl, ids) 
+      ## }
+      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                  file2 = config_$dashboard_log)
+      process_ui_end(data_meta, "run_prepare_sector")
+      timer_observer$destroy()
+    }
+  }) 
+  ## config_$models <- get_config_models()
+  ## assign("config_", config_, envir = .GlobalEnv)
+  
+}
+
 
 get_data_summary <- function(data_meta, data_file, summary_file) {
   ## list2env(get_dashboard_tab_ids(), env = .GlobalEnv)  
@@ -1331,109 +1810,6 @@ build_summary_data <- function(data_meta) {
     }
   }
 }
-make_dashboard_table <- function(data, ids) {
-  ## alert(paste0("data::", data))
-## make_dashboard_table <- function(tbl_choice, csv_file, tab_id, sub_tab_id) {
-  ## tab_name <- input$dashboard_panel
-  ## lookup <- dashboard_tab_lookup[[tab_name]]
-  ## tab_id <- lookup$outputId
-  ## file_exists <- FALSE
-  ## ## alert(sub_tab_id)
-  ## if (tbl_choice == "data" & file.exists(csv_file)) {
-  ##   if (file.exists(csv_file)) {
-  ##     data <- read_csv(file = csv_file, n_max = 20)
-  ##     file_exists <- TRUE
-  ##   }
-  ## } else if (tbl_choice == "summary") {
-  ##   csv_file <- str_replace(csv_file, ".csv", "_sum.csv")
-  ##   if (file.exists(csv_file)) {
-  ##     ## alert(paste0("csv_file:", csv_file))
-  ##     data <- read_csv(file = csv_file) 
-  ##     file_exists <- TRUE
-  ##     if (sub_tab_id == "reef") {
-  ##       data_sum <- str_replace(csv_file, "_sum.csv", "_reef_sum.csv")
-  ##       data <- read_csv(file = data_sum) 
-  ##       data <- data |>
-  ##         dplyr::select(-starts_with(c("nrm", "sector"))) 
-  ##     }
-  ##     if (sub_tab_id == "nrm") {
-  ##       data_sum <- str_replace(csv_file, "_sum.csv", "_nrm_sum.csv")
-  ##       data <- read_csv(file = data_sum) 
-  ##       ## alert(data_sum)
-  ##       data <- data |>
-  ##         dplyr::select(-starts_with(c("reef", "sector"))) |> 
-  ##         group_by(nrm) |>
-  ##         summarise(across(ends_with("date"), max)) |>
-  ##         ungroup()
-  ##       ## write_csv(data, file = data_sum)
-  ##     }
-  ##     if (sub_tab_id == "sector") {
-  ##       data_sum <- str_replace(csv_file, "_sum.csv", "_sector_sum.csv")
-  ##       data <- read_csv(file = data_sum) 
-  ##       ## alert(paste("data_sum", data_sum))
-  ##       data <- data |>
-  ##         dplyr::select(-starts_with(c("reef", "nrm"))) |> 
-  ##         group_by(sector) |>
-  ##         summarise(across(ends_with("date"), max)) |>
-  ##         ungroup()
-  ##       ## write_csv(data, file = data_sum)
-  ##     }
-  ##   }
-  ## }  
-  ## ## alert(paste0("names:", names(data)))
-  ## if (file_exists) {
-    colstyle <- function(survey_field, extract_field = NULL) {
-      colDef(
-        format = colFormat(datetime = TRUE),
-                    style = function(value, index) {
-                      if (is.na(value)) {
-                          list(background = "red")
-                      } else {
-                        if (value < data[[survey_field]][index]) {
-                          list(background = "red")
-                        } else if (!is.null(extract_field)) {
-                          if (value < data[[extract_field]][index])
-                            list(background = "orange")
-                          else 
-                            list(background = "lightgreen")
-                        } else 
-                          list(background = "lightgreen")
-                      }
-                    })
-    }
-    output[[paste0(ids$tab_id, "_", ids$sub_tab_id, "_tbl")]] <- reactable::renderReactable({
-      data |> reactable(
-                columns = list(
-                  survey_date = colDef(format = colFormat(datetime = TRUE)),
-                  extraction_date = colstyle(survey_field = "survey_date"),
-                  nrm_model_date = colstyle(survey_field = "survey_date",
-                                            extract_field = "extraction_date"),
-                  sector_model_date = colstyle(survey_field = "survey_date",
-                                               extract_field = "extraction_date"),
-                  reef_model_date = colstyle(survey_field = "survey_date",
-                                             extract_field = "extraction_date")
-                ),
-                compact = TRUE, bordered = TRUE, resizable = TRUE,
-                highlight = TRUE,
-                wrap = FALSE,
-                filterable = TRUE,
-                defaultColDef = colDef(filterMethod = JS("function(rows, columnId, filterValue) {
-        return rows.filter(function(row) {
-          return row.values[columnId].indexOf(filterValue) !== -1
-        })
-      }")),
-      ##pagination = FALSE, height = 600,
-      ## defaultColDef = colDef(style = "white-space: nowrap;"),
-      theme = reactableTheme(
-        headerStyle = list(color = "white", backgroundColor = "rgb(81, 127, 185)"),
-        borderWidth = "1pt",
-        borderColor = "rgb(85, 85, 85)",
-        style = list(fontFamily = "Helvetica, Arial, sans-serif", fontSize = "10px")
-      )
-      )
-    })
-  ## }
-}
 ## Return either the data/summary data or FALSE
 ## This function does not compile the data, it only reads it in
 get_table_data <- function(tbl_choice, data_meta) {
@@ -1467,31 +1843,6 @@ get_table_data <- function(tbl_choice, data_meta) {
     }
   }
   return(data)
-}
-get_dashboard_tab_ids <- function() {
-  tab_name <- input$dashboard_panel
-  lookup <- dashboard_tab_lookup[[tab_name]]
-  tab_id <- lookup$outputId
-  ## alert(names(input))
-  if(!is.null(input$dashboard_sql_panel)) {
-    sub_tab_name <- input$dashboard_sql_panel
-    sub_tab_id <- lookup[[sub_tab_name]]$outputId
-  } else {
-    sub_tab_name <- "sql"
-    sub_tab_id <- "sql"
-  }
-  list(tab_name = tab_name,
-       lookup = lookup,
-       tab_id =  tab_id,
-       sub_tab_name =  sub_tab_name,
-       sub_tab_id = sub_tab_id
-       )
-}
-get_dashboard_data_type <- function(ids) {
-  data_type <- ids$lookup$data_type
-  data_scale <- ids$sub_tab_id
-  list(data_type = data_type,
-       data_scale = data_scale)
 }
 
 get_dashboard_file_names <- function(lookup) {
@@ -1541,24 +1892,24 @@ process_ui_end <- function(data_meta, id) {
 }
 
 
-create_db_table_from_extract <- function(db_path, data_type, csv_file) {
-  out <- system(sprintf("sqlite3 %s 'DROP TABLE IF EXISTS %s';",
-                        db_path, data_type),
-                wait = TRUE, intern = TRUE)
-  out <- system(sprintf("sqlite3 %s '.mode csv' '.headers on' '.import %s %s';",
-                        db_path, csv_file, data_type),
-                wait = TRUE, intern = TRUE)
+## create_db_table_from_extract <- function(db_path, data_type, csv_file) {
+##   out <- system(sprintf("sqlite3 %s 'DROP TABLE IF EXISTS %s';",
+##                         db_path, data_type),
+##                 wait = TRUE, intern = TRUE)
+##   out <- system(sprintf("sqlite3 %s '.mode csv' '.headers on' '.import %s %s';",
+##                         db_path, csv_file, data_type),
+##                 wait = TRUE, intern = TRUE)
 
-  ## out <- system(sprintf("sqlite3 %s 'ALTER TABLE %s ADD COLUMN extraction_date TEXT; UPDATE %s SET extraction_date = DATETIME(\"now\");'",
-  ##                       db_path, data_type, data_type),
-  ##               wait = TRUE, intern = TRUE)
-  ## data_info <- format(file.mtime(csv_file), "%Y-%m-%d %H:%M:%S")
-  ## con <- dbConnect(RSQLite::SQLite(), db_path)
-  ## tbl(con, data_type) |>
-  ##   mutate(extraction_date = "fish") |> 
-  ##   compute(data_type, temporary = FALSE, overwrite = TRUE)
-  ## dbDisconnect(con)
-}
+##   ## out <- system(sprintf("sqlite3 %s 'ALTER TABLE %s ADD COLUMN extraction_date TEXT; UPDATE %s SET extraction_date = DATETIME(\"now\");'",
+##   ##                       db_path, data_type, data_type),
+##   ##               wait = TRUE, intern = TRUE)
+##   ## data_info <- format(file.mtime(csv_file), "%Y-%m-%d %H:%M:%S")
+##   ## con <- dbConnect(RSQLite::SQLite(), db_path)
+##   ## tbl(con, data_type) |>
+##   ##   mutate(extraction_date = "fish") |> 
+##   ##   compute(data_type, temporary = FALSE, overwrite = TRUE)
+##   ## dbDisconnect(con)
+## }
 
 create_db_summary <- function(db_path, data_type, data_scale, csv_file) {
   ## Reef level
@@ -1591,101 +1942,12 @@ create_db_summary <- function(db_path, data_type, data_scale, csv_file) {
 }
 
 
-get_db_table_data <- function(tbl_choice, data_meta) {
-  ## alert(data_meta)
-  file_exists <- FALSE 
-  data <- NULL
-  con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-  tbls <- dbListTables(con) 
-  if (is.null(tbl_choice)) tbl_choice <- "summary"
-  if (tbl_choice == "data" &
-      data_meta$data_type %in% tbls) {
-    db_tbl <- paste0(data_meta$data_type)
-    ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-    data <- tbl(con, db_tbl) |>
-      head(20) |>
-      collect()
-  } else if (tbl_choice == "summary") {
-    if (data_meta$data_scale %in% c("reef", "sql") &
-        paste0(data_meta$data_type, "_sum") %in% tbls) { ## the Extract data tab
-      if (data_meta$data_scale == "sql") {
-        db_tbl <- paste0(data_meta$data_type, "_sum")
-        data <- tbl(con, db_tbl) |>
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "Sectors") |> 
-                    select(A_SECTOR = domain_name, sector_model_date = model_date),
-                    by = "A_SECTOR") |> 
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "nrm") |> 
-                    select(NRM_REGION = domain_name, nrm_model_date = model_date),
-                    by = "NRM_REGION") |> 
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "reef") |> 
-                    select(AIMS_REEF_NAME = domain_name, reef_model_date = model_date),
-                    by = "AIMS_REEF_NAME") |> 
-          collect() |>
-          distinct()
-      } else {
-        db_tbl <- paste0(data_meta$data_type, "_sum")
-        data <- tbl(con, db_tbl) |>
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "reef") |> 
-                    select(AIMS_REEF_NAME = domain_name, reef_model_date = model_date),
-                    by = "AIMS_REEF_NAME") |> 
-          collect() |>
-          distinct()
-      }
-      ## mutate(extraction_date1 = as.POSIXct(extraction_date, format = "%Y-%m-%d %H:%M:%S"))
-      ## dbDisconnect(con)
-    } else if (paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum") %in% tbls) {  ## one of the Prepare tabs
-      db_tbl <- paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum")
-      ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-      if (data_meta$data_scale == "reef") {
-        data <- tbl(con, db_tbl) |>
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "reef") |> 
-                    select(AIMS_REEF_NAME = domain_name, reef_model_date = model_date),
-                    by = "AIMS_REEF_NAME") |> 
-          distinct() |> 
-          collect() 
-      }
-      if (data_meta$data_scale == "nrm") {
-        data <- tbl(con, db_tbl) |>
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "nrm") |> 
-                    select(NRM_REGION = domain_name, nrm_model_date = model_date),
-                    by = "NRM_REGION") |> 
-          distinct() |> 
-          collect()
-      }
-      if (data_meta$data_scale == "sector") {
-        data <- tbl(con, db_tbl) |>
-          left_join(tbl(con, "models") |>
-                    filter(data_type == data_meta$data_type,
-                           data_scale == "Sectors") |> 
-                    select(A_SECTOR = domain_name, sector_model_date = model_date),
-                    by = "A_SECTOR") |> 
-          distinct() |> 
-          collect()
-      }
-      ## dbDisconnect(con)
-    }
-  }
-  dbDisconnect(con)
-  return(data)
-}
 
 get_candidates_to_select_from <- function(data_meta, field) {
-  if (data_meta$data_scale == "reef" )
-    db_tbl <- paste0(data_meta$data_type, "_sum")
-  else
-    db_tbl <- paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum")
+  ## if (data_meta$data_scale == "reef" )
+  ##   db_tbl <- paste0(data_meta$data_type, "_sum")
+  ## else
+  db_tbl <- paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum")
   con <- dbConnect(RSQLite::SQLite(), config_$db_path)
   tbls <- dbListTables(con) 
   if (db_tbl %in% tbls) {
@@ -1699,3 +1961,6 @@ get_candidates_to_select_from <- function(data_meta, field) {
   dbDisconnect(con)
   return(candidates)
 }
+
+
+  

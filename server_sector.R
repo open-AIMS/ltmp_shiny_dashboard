@@ -3,7 +3,7 @@ sector_tab_lookup <- list(
     data_type = "photo-transect",
     outputId = "sector_pt",
     family = "binomial",
-    shelfs = c("Inshore", "Offshore"),
+    ## shelfs = c("Inshore", "Offshore"),
     groups = c("HARD CORAL", "SOFT CORAL",
                "ALGAE", "MACROALGAE")
   ),
@@ -11,21 +11,21 @@ sector_tab_lookup <- list(
     data_type = "manta",
     outputId = "sector_manta",
     family = "beta",
-    shelfs = c("Offshore"),
+    ## shelfs = c("Offshore"),
     groups = c("HARD CORAL")
   ),
   "Juveniles" =  list(
     data_type = "juveniles",
     outputId = "sector_juveniles",
     family = "binomial",
-    shelfs = c("Inshore", "Offshore"),
+    ## shelfs = c("Inshore", "Offshore"),
     groups = c("HARD CORAL")
   ),
   "Fish" =  list(
     data_type = "fish",
     outputId = "sector_fish",
     family = "poisson",
-    shelfs = c("Inshore", "Offshore"),
+    ## shelfs = c("Inshore", "Offshore"),
     groups = c("Harvested", "Herbivores", "Coral Trout",
                "Large fishes", "Damselfishes")
   )
@@ -65,11 +65,11 @@ observeEvent(input$sector_panel, {     ## when change panels
                         label = "",
                         icon = icon("rotate-right")),
            ),
-        column(width = 12, selectInput(paste0(tab_id, "_shelf_selector"),
-                                       "Select Shelf:",
-                                       ## choices = sector_tab_lookup[[tab_name]]$shelfs)),
-                                       choices = current_candidates |>
-                                      pull(shelf) |> unique())),
+        ## column(width = 12, selectInput(paste0(tab_id, "_shelf_selector"),
+        ##                                "Select Shelf:",
+        ##                                ## choices = sector_tab_lookup[[tab_name]]$shelfs)),
+        ##                                choices = current_candidates |>
+        ##                               pull(shelf) |> unique())),
         ## {if (sector_tab_lookup[[tab_name]]$data_type != "manta") {
            column(width = 12, selectInput(paste0(tab_id, "_group_selector"),
                                           "Select group:",
@@ -114,6 +114,13 @@ observeEvent(input$sector_panel, {     ## when change panels
           tabPanel(
             title = "Annual comparison estimates",
             icon = icon("database"),
+            reactableOutput(outputId = paste0(tab_id, "_all_annual_comp_tbl")),
+            downloadButton(paste0(tab_id, "_all_annual_comp_download_data"), "Download as csv"),
+            downloadButton(paste0(tab_id, "_all_annual_comp_download_data_posteriors"), "Download posteriors as csv")
+            ),
+          tabPanel(
+            title = "Comparison to most recent",
+            icon = icon("database"),
             reactableOutput(outputId = paste0(tab_id, "_annual_comp_tbl")),
             downloadButton(paste0(tab_id, "_annual_comp_download_data"), "Download as csv"),
             downloadButton(paste0(tab_id, "_annual_comp_download_data_posteriors"), "Download posteriors as csv")
@@ -140,15 +147,22 @@ observeEvent(input$sector_panel, {     ## when change panels
     tab_name <- input$sector_panel
     ## alert(tab_name)
     data_types <- sector_tab_lookup[[tab_name]]$data_type
+    if(!does_db_table_exist("models")) {
+      config_$models <- get_config_models()
+    } else {
+      config_$models <- get_db_model_data(method = NULL, scale = "sector", domain = NULL) |>
+        filter(data_type == data_types)
+    }
     ## alert(paste0("data_types:", data_types))
-    config_$models <- get_config_models()
+    ## config_$models <- get_config_models()
+    ## config_$models <- get_db_summary_table(method = data_types , scale = "sector")
     ## assign("config_", config_, envir = .GlobalEnv)
-    ## cat(file = stderr(), paste("refresh pressed:", config_$models), "\n")
+    cat(file = stderr(), paste("refresh pressed:", config_$models), "\n")
     tab_id <- sector_tab_lookup[[tab_name]]$outputId
-    ## alert(config_$models |>
-    ##   filter(data_scale == "Sectors"))
+    ## alert(config_$models== "sector"))
     current_candidates <- config_$models |>
-      filter(data_scale == "Sectors",
+      ## filter(data_scale == "Sectors",
+      filter(data_scale == "sector",
              ## data_type == sector_tab_lookup[[tab_name]]$data_type)
              data_type == data_types)
     ## alert(current_candidates |> pull(domain_name) |> unique())
@@ -163,21 +177,21 @@ observeEvent(input$sector_panel, {     ## when change panels
   observeEvent(c(input[[paste0(tab_id, "_sector_selector")]]), {
     sector_selector <- input[[paste0(tab_id, "_sector_selector")]]
     data_types <- sector_tab_lookup[[tab_name]]$data_type
-    shelfs <- config_$models |>
-      filter(data_type == data_types,
-             data_scale == "Sectors",
-             domain_name == sector_selector) |>
-      pull(shelf) |>
-      unique()
-    updateSelectInput(session, paste0(tab_id, "_shelf_selector"),
-                      choices = shelfs)
+    ## shelfs <- config_$models |>
+    ##   filter(data_type == data_types,
+    ##          data_scale == "Sectors",
+    ##          domain_name == sector_selector) |>
+    ##   pull(shelf) |>
+    ##   unique()
+    ## updateSelectInput(session, paste0(tab_id, "_shelf_selector"),
+    ##                   choices = shelfs)
     ## alert(paste0("data_type:", data_types))
     ## alert(paste0("config_$models:",config_$models |>
     ##                                filter(data_type == "manta",
     ##                                       data_scale == "Sectors")))
     groups <- config_$models |>
       filter(data_type == data_types,
-             data_scale == "Sectors",
+             data_scale == "sector",
              domain_name == sector_selector) |>
       pull(group) |>
       unique()
@@ -189,11 +203,11 @@ observeEvent(input$sector_panel, {     ## when change panels
 
   observeEvent(c(
     input[[paste0(tab_id, "_sector_selector")]],
-    input[[paste0(tab_id, "_shelf_selector")]],
+    ## input[[paste0(tab_id, "_shelf_selector")]],
     input[[paste0(tab_id, "_group_selector")]]), {
 
       sector_selector <- input[[paste0(tab_id, "_sector_selector")]]
-      shelf_selector <- input[[paste0(tab_id, "_shelf_selector")]]
+      ## shelf_selector <- input[[paste0(tab_id, "_shelf_selector")]]
       group_selector <- input[[paste0(tab_id, "_group_selector")]]
       data_type <- sector_tab_lookup[[tab_name]]$data_type
 
@@ -210,7 +224,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                           "_",
                           " ",  ## ghost depth
                           "_",
-                          shelf_selector,
+                          " ",#shelf_selector,
                           "_",
                           ".png")
         list(src = outfile,
@@ -232,7 +246,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                           "_",
                           " ",  ## ghost depth
                           "_",
-                          shelf_selector,
+                          " ", #shelf_selector,
                           "_",
                           ".png")
         list(src = outfile,
@@ -253,7 +267,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                "_",
                " ",  ## ghost depth
                "_",
-               shelf_selector,
+               " ", #shelf_selector,
                "_",
                ".png")
       })
@@ -270,7 +284,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                     "_",
                     " ",  ## ghost depth
                     "_",
-                    shelf_selector,
+                    " ", #shelf_selector,
                     "__",
                     "raw_data",
                     ".rds") 
@@ -302,7 +316,8 @@ observeEvent(input$sector_panel, {     ## when change panels
           } else {
             raw_bits <- data5 |>
               mutate(Sector = sector_selector) |> 
-              dplyr::select(Sector, Shelf) |>
+              ## dplyr::select(Sector, Shelf) |>
+              dplyr::select(Sector) |>
               mutate(GROUP = group_selector,
                      FAMILY = sector_tab_lookup[[tab_name]]$family) |>
               distinct() 
@@ -321,7 +336,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                    "_",
                    " ",  ## ghost depth
                    "_",
-                   shelf_selector,
+                   " ", #shelf_selector,
                    "__",
                    ## "binomial_",
                    sector_tab_lookup[[tab_name]]$family,
@@ -376,7 +391,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                     "_",
                     " ",  ## ghost depth
                     "_",
-                    shelf_selector,
+                    " ", #shelf_selector,
                     "__",
                     ## "binomial_",
                    sector_tab_lookup[[tab_name]]$family,
@@ -420,8 +435,63 @@ observeEvent(input$sector_panel, {     ## when change panels
           }
         )
       }
+      
+      ## All Annual comparison summaries
+      nm3a <- paste0("www/data/modelled/",
+                    data_type,
+                    "_Sectors_",
+                    sector_selector,
+                    "_",
+                    group_selector,
+                    "_",
+                    " ",  ## ghost zone
+                    "_",
+                    " ",  ## ghost depth
+                    "_",
+                    " ", #shelf_selector,
+                    "__",
+                    ## "binomial_",
+                   sector_tab_lookup[[tab_name]]$family,
+                   "_",
+                    "all_yearcomp_sum",
+                    ".rds") 
+      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+        if(file.exists(nm3a)) {
+          data3a <- readRDS(file = nm3a)
+          data3a <- data3a |>
+            mutate(Sector = sector_selector) |> 
+            left_join(raw_bits, by = "Sector")
+        }
+        output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- reactable::renderReactable({
+          make_table(data3a, type = "all_annual_comp")
+        })
+        output[[paste0(tab_id, "_all_annual_comp_download_data")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            paste0(gsub("__.*", "_", basename(nm3)), "all_annual_comp_summary.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            write.csv(data3a, file)
+          }
+        )
+        output[[paste0(tab_id, "_all_annual_comp_download_data_posteriors")]] <- downloadHandler(
+          filename = function() {
+            ## Use the selected dataset as the suggested file name
+            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "all_annual_comp_posteriors.csv")
+          },
+          content = function(file) {
+            ## Write the dataset to the `file` that will be downloaded
+            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3a)) ## |>
+              ## mutate(AIMS_REEF_NAME = reefs_selector,
+              ##        DATA_TYPE = data_type,
+              ##        )
+            write_csv(data, file)
+          }
+        )
+      }
 
-      ## Annual comparison summaries
+      ## Annual comparison summaries (Comparison to most recent year)
       nm3 <- paste0("www/data/modelled/",
                     data_type,
                     "_Sectors_",
@@ -433,7 +503,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                     "_",
                     " ",  ## ghost depth
                     "_",
-                    shelf_selector,
+                    " ", #shelf_selector,
                     "__",
                     ## "binomial_",
                    sector_tab_lookup[[tab_name]]$family,
@@ -488,7 +558,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                  "_",
                  " ",  ## ghost depth
                  "_",
-                 shelf_selector,
+                 " ", #shelf_selector,
                  "__",
                  "raw_sums",
                  ".rds") 
