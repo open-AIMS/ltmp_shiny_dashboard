@@ -10,15 +10,6 @@ server <- function(input, output, session) {
   source("server_nrm.R", local = TRUE)
   source("server_sector.R", local = TRUE)
   
-  ## ## source("server_nrm_pt.R", local = TRUE)
 }
 
-## server <- function(input, output, session) {
-##   output$plot <- renderPlot({
-##     set.seed(123)
-##     data <- rnorm(input$num)
-##     hist(data, main = "Histogram of Random Data", 
-##          xlab = "Value", col = "skyblue", border = "white")
-##   })
-## }
 

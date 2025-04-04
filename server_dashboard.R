@@ -120,7 +120,7 @@ dashboard_tab_lookup <- list(
     )
   )
 )
-
+  
 ## Functions =========================================================
 get_dashboard_tab_ids <- function() {
   tab_name <- input$dashboard_panel
@@ -264,8 +264,9 @@ make_dashboard_table <- function(data, ids) {
                     ## list(flag = function(x) x == extract_data_hash)))
                     list(flag = function(x) x == sub("model", "extract", x))))
   }
+   write.csv(data, file = "../data/tempA.csv")
 ##   if (nrow(data) > 10)
-## ## alert(head(data |> dplyr::select(flag, ends_with("hash"))))
+## alert(head(data |> dplyr::select(flag, ends_with("hash"))))
 ## alert(head(data |> dplyr::select(flag)))
   colstyle <- function(survey_field, extract_field = NULL, flag_field = NULL) {
       colDef(
@@ -335,6 +336,8 @@ make_dashboard_table <- function(data, ids) {
     })
   ## }
 }
+
+  
 ## Triggered events ==================================================
 
 ## Change in data_type tabs (Photo-transects, Manta tow, Juveniles,
@@ -689,7 +692,6 @@ observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
   if (!is.null(tbl)) {
     make_dashboard_table(tbl, ids) 
   }
-
   if (1 == 1) {
     if (data_meta$data_scale == "reef") {
       candidates <- get_candidates_to_select_from(data_meta, "domain_name")
@@ -769,9 +771,9 @@ observeEvent(c(input$refresh_summary_tbl), {
     make_dashboard_table(tbl, ids) 
   }
   ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
-  if (!is.null(tbl)) {
-    make_dashboard_table(tbl, ids) 
-  }
+  ## if (!is.null(tbl)) {
+  ##   make_dashboard_table(tbl, ids) 
+  ## }
   ## ## update_summary_data(data_meta)
   ## db <- readRDS(config_$db_file)
   ## csv_file <- db[[data_meta$data_type]]$data_file
@@ -857,55 +859,41 @@ observeEvent(input$run_fit_reefs, {
   data_type <- data_meta$data_type
   reefs <- input[[paste0(data_type, "_reef_model_choice")]]
   if ("all" %in% reefs) {
-    reefs <- get_candidates_to_select_from(data_meta, "AIMS_REEF_NAME")
+    reefs <- get_candidates_to_select_from(data_meta, "domain_name")
   }
   process_ui_start(data_meta, id = "run_fit_reef")
   process <- processx::process$new("Rscript", 
-                                   args = c("../dev/R/run_models.R",
+                                   ## args = c("../dev/R/run_models.R",
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=fit"),
                                             paste0("--method=", data_type),
                                             paste0("--scale=reef"),
                                             paste0("--domain=", reefs),
-                                            paste0("--log=", config_$dashboard_log)),
-                                   stdout = config_$dashboard_log
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   ## stdout = config_$dashboard_log,
                                    ## stderr =  config_$dashboard_log
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
                                    )
     timer_observer <- observe({
       invalidateLater(1000)
       if(isolate(process$is_alive()) == FALSE) {
-        ## alert("Made it")
- ##        alert(names(get_config_models()))
- ## bb <- get_db_model_data(method = data_type,
- ##                                      scale = "reef", domain = reefs)
- ##        alert(bb)
-        ## config_$models <-
-        ##   ## get basic data on fitted models
-        ##   get_config_models() |>
-        ##   ## dplyr::select(-any_of("reef_model_data_hash")) |> 
-        ##   ## ## get any info from the database
-        ##   ## left_join(get_db_model_data(method = data_type,
-        ##   ##                             scale = "reef", domain = reefs),
-        ##   ##           by = c("data_type" = "data_type",
-        ##   ##                  "data_scale" = "data_scale",
-        ##   ##                  "domain_name" = "domain_name")) |> 
-        ##   ## ## get the hash of data
-        ##   left_join(make_data_hash(method = data_type, scale = "reef", domain = reefs) |>
-        ##             dplyr::rename("reef_model_data_hash" = "model_data_hash"),
-        ##             by = c("data_type", "data_scale", "domain_name")) |>
-        ##   mutate(reef_model_data_hash = coalesce(reef_model_data_hash.y,
-        ##                                          reef_model_data_hash.x)) |>
-        ##   dplyr::select(-any_of(c("reef_model_data_hash.x", "reef_model_data_hash.y")))
-        ## ## alert(names(config_$models))
-        ## ## alert(head(config_$models |> dplyr::select(domain_name, reef_model_data_hash) |> dplyr::select(domain_name %in% c("AUKANE", "AUREED"))))
-        ## ## put those models into database
-        ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-        ## copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
-        ## dbDisconnect(con)
 
         update_db_model_hash(method = data_type, scale = "reef", domain = reefs)
-        tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+        ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
+        tbl_choice <- input$sql_tbl_choice
+        if (is.null(tbl_choice)) tbl_choice <- "summary"
+        if (tbl_choice == "data") {
+          tbl <- make_dashboard_data(method = data_meta$data_type,
+                                     scale = data_meta$data_scale)
+        } else {
+          tbl <- make_dashboard_summary(method = data_meta$data_type,
+                                        scale = data_meta$data_scale)
+        }
         if (!is.null(tbl)) {
           make_dashboard_table(tbl, ids) 
         }
+
         process_ui_end(data_meta, "run_fit_reefs")
         timer_observer$destroy()
       }
@@ -971,28 +959,24 @@ observeEvent(input$run_fit_nrm, {
   ids <- get_dashboard_tab_ids()  
   data_meta <- get_dashboard_data_type(ids)  
   data_type <- data_meta$data_type
+  data_scale <- data_meta$data_scale
   nrms <- input[[paste0(data_type, "_nrm_model_choice")]]
   if ("all" %in% nrms) {
-    nrms <- get_candidates_to_select_from(data_meta, "NRM_REGION")
+    nrms <- get_candidates_to_select_from(data_meta, "domain_name")
+    ## nrms <- get_candidates_to_select_from(data_meta, "NRM_REGION")
     ## dashboard_tab_lookup <- get("dashboard_tab_lookup", envir = .GlobalEnv)
     ## nrms <- dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices
   }
-
-  ## alert(class(reefs))
-  ## names(process) <- nrms
-  ## for (nrm in nrms) {
-  ## rf <- reefs
-    ## alert(rf)
-    ## prepare the ui for an external process
   process_ui_start(data_meta, id = "run_fit_nrm")
   process <- processx::process$new("Rscript", 
-                                   args = c("../dev/R/run_models.R",
+                                   args = c("../dev/R/batch.R",
+                                            paste0("--purpose=fit"),
                                             paste0("--method=", data_type),
-                                            paste0("--scale=nrm"),
+                                            paste0("--scale=", data_scale),
                                             paste0("--domain=", nrms),
-                                            paste0("--log=", config_$dashboard_log)),
-                                   stdout = config_$dashboard_log
-                                   ## stderr =  config_$dashboard_log
+                                            paste0("--log=../", config_$dashboard_log)),
+                                   stderr =  sub("dashboard", "dashboard_error",
+                                                 config_$dashboard_log)
                                    )
 
     ## process[[rf]] <- processx::process$new("docker", 
@@ -1029,6 +1013,7 @@ observeEvent(input$run_fit_nrm, {
         update_db_model_hash(method = data_type, scale = "nrm", domain = nrms)
         ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
         tbl_choice <- input$sql_tbl_choice
+        if (is.null(tbl_choice)) tbl_choice <- "summary"
         if (tbl_choice == "data") {
           tbl <- make_dashboard_data(method = data_meta$data_type,
                                      scale = data_meta$data_scale)
@@ -1054,6 +1039,8 @@ observeEvent(input$run_fit_nrm, {
         ## db <- readRDS(config_$db_file)
         ## summary_file <- db[[data_meta$data_type]]$summary_file
         ## join_extracted_summary_to_model_meta(summary_file, data_meta)
+        file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                    file2 = config_$dashboard_log)
         process_ui_end(data_meta, "run_fit_nrm")
         timer_observer$destroy()
       }
@@ -1088,7 +1075,6 @@ observeEvent(input$run_fit_sector, {
     ## dashboard_tab_lookup <- get("dashboard_tab_lookup", envir = .GlobalEnv)
     ## sectors <- dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices
   }
-  
   process_ui_start(data_meta, id = "run_fit_sector")
   process <- processx::process$new("Rscript", 
                                    args = c("../dev/R/batch.R",
@@ -1911,6 +1897,7 @@ process_ui_end <- function(data_meta, id) {
 ##   ## dbDisconnect(con)
 ## }
 
+## This function is no longer in use
 create_db_summary <- function(db_path, data_type, data_scale, csv_file) {
   ## Reef level
   data_info <- format(file.mtime(csv_file), "%Y-%m-%d %H:%M:%S")
@@ -1951,11 +1938,11 @@ get_candidates_to_select_from <- function(data_meta, field) {
   con <- dbConnect(RSQLite::SQLite(), config_$db_path)
   tbls <- dbListTables(con) 
   if (db_tbl %in% tbls) {
-  candidates <- tbl(con, db_tbl) |>
-    select(!!sym(field)) |>
-    distinct() |> 
-    collect() |>
-    pull(!!sym(field)) 
+    candidates <- tbl(con, db_tbl) |>
+      select(!!sym(field)) |>
+      distinct() |> 
+      collect() |>
+      pull(!!sym(field)) 
   } else
     candidates <- NULL
   dbDisconnect(con)
@@ -1964,3 +1951,5 @@ get_candidates_to_select_from <- function(data_meta, field) {
 
 
   
+
+

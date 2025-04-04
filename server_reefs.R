@@ -4,67 +4,54 @@ reefs_tab_lookup <- list(
   "Photo-transects" =  list(
     data_type = "photo-transect",
     outputId = "reefs_pt",
-    family = "binomial"
+    family = "binomial",
     ## zones = c(" "),
     ## depths = c("2", "5", "9"),
     ## shelfs = c(" "),
     ## groups = c("HARD CORAL", "SOFT CORAL",
     ##            "ALGAE", "MACROALGAE")
+    response = ""
   ),
   "Manta tow" =  list(
     data_type = "manta",
     outputId = "reefs_manta",
-    family = "beta"
+    family = "beta",
     ## shelfs = c("Offshore"),
     ## groups = c("HARD CORAL")
+    response = ""
   ),
   "Juveniles" =  list(
     data_type = "juveniles",
     outputId = "reefs_juveniles",
-    family = "binomial"
+    family = "binomial",
     ## shelfs = c("Inshore", "Offshore"),
     ## groups = c("HARD CORAL")
+    response = ""
   ),
   "Fish" =  list(
     data_type = "fish",
     outputId = "reefs_fish",
-    family = "poisson"
+    family = "poisson",
     ## shelfs = c("Inshore", "Offshore"),
-    ## groups = c("Harvested", "Herbivores", "Coral Trout",
-    ##            "Large fishes", "Damselfishes")
+    groups = c("Harvested", "Herbivores", "Coral Trout",
+               "Large fishes", "Damselfishes"),
+    responses = c("ABUNDANCE", "Biomass")
   )
 )
 
 observeEvent(input$run_reef_refresh, {
   tab_name <- input$reefs_panel
-  data_types <- reefs_tab_lookup[[tab_name]]$data_type
-  ## alert(data_types)
-  if(!does_db_table_exist("models")) {
-    config_$models <- get_config_models()
-    ## cat(file = "/home/mlogan/data/con.txt", paste("refresh pressed:", config_$models), "\n", append = FALSE)
-    ## write_csv(file = "/home/mlogan/data/con.csv", config_$models)
-  } else {
-    ##   config_$models <- get_db_summary_table(method = data_types , scale = "reef")
-    ## write_csv(file = "/home/mlogan/data/con1.csv", config_$models)
-    ## config_$models <- get_db_model_data(method = data_types, scale = "reef", domain = NULL)
-    config_$models <- get_db_model_data(method = NULL, scale = "reef", domain = NULL) |>
-      filter(data_type == data_types)
-    ## write_csv(file = "/home/mlogan/data/con2.csv", config_$models)
-    ## cat(file = "/home/mlogan/data/con1.txt", paste("refresh pressed:", config_$models), "\n", append = FALSE)
-  }
-    ## alert(config_$models |>
-    ##   filter(data_type == "manta",
-    ##          data_scale == "reef",
-    ##          domain_name == "Reef 14-133"))
-  assign("config_", config_, envir = .GlobalEnv)
-  ## alert(config_$models |> filter(domain_name == "Reef 14-133"))
-  cat(file = stderr(), paste("refresh pressed:", config_$models), "\n")
   tab_id <- reefs_tab_lookup[[tab_name]]$outputId
-  current_candidates <- config_$models |>
-    filter(data_scale == "reef",
-           data_type == reefs_tab_lookup[[tab_name]]$data_type)
-  ## cat(file = stderr(), paste("refresh pressed:", current_candidates |> pull(domain_name) |> unique()), "\n")
-  ## alert(current_candidates)
+  data_types <- reefs_tab_lookup[[tab_name]]$data_type
+  current_candidates <- get_candidates(tab_name, data_types, scale = "reef")
+  ## add an "all reefs" candidate
+  current_candidates <-
+    bind_rows(
+      current_candidates |>
+      slice(1) |> 
+      mutate(across(everything(), \(x) NA)) |>
+      mutate(domain_name = "All Reefs"),
+      current_candidates)
   updateSelectInput(session, paste0(tab_id, "_reefs_selector"),
                     choices = current_candidates |>
                       pull(domain_name) |> unique())
@@ -73,20 +60,20 @@ observeEvent(input$run_reef_refresh, {
 
 
 observeEvent(input$reefs_panel, {     ## when change panels
-  ## config_mod_file <- paste0(config_$data_path, "models.csv")
   tab_name <- input$reefs_panel
   tab_id <- reefs_tab_lookup[[tab_name]]$outputId
-  ## current_candidates <- config_$models |>
-  ##   filter(data_scale == "reef",
-  ##          data_type == reefs_tab_lookup[[tab_name]]$data_type,
-  ##          domain_name == input$reefs_selector)
-  current_candidates <- config_$models |>
-    filter(data_scale == "reef",
-           data_type == reefs_tab_lookup[[tab_name]]$data_type)
+  data_type <- reefs_tab_lookup[[tab_name]]$data_type
+  current_candidates <- get_candidates(tab_name,
+                                       data_type,
+                                       scale = "reef",
+                                       domain = NULL) 
+ ## alert(reefs_tab_lookup[[tab_name]]$data_type)
+  write_csv(current_candidates, file = paste0(config_$data_path, "AAAA.csv")) 
   ## Render the content of the panel
   data_type <- reefs_tab_lookup[[tab_name]]$data_type
   ## alert(current_candidates)
   ## alert(data_type)
+  write_csv(current_candidates, file = "../data/tempA.csv")
   output[[paste0(tab_id, "_panel")]] <- renderUI({
 
     fluidRow(
@@ -100,12 +87,14 @@ observeEvent(input$reefs_panel, {     ## when change panels
                style = "display:flex",
            selectInput(paste0(tab_id, "_reefs_selector"),
                        "Select Reef:",
-                       choices = config_$models |>
-                         filter(data_scale == "reef",
-                                data_type == data_type) |>
+                       choices = ## config_$models |>
+                         ## filter(data_scale == "reef",
+                         ##        data_type == data_type) |>
+                         current_candidates |> 
                          pull(domain_name) |>
                          unique() |>
-                       sort(), width = "90%"),
+                         sort(),
+                       width = "90%"),
            actionButton(inputId = "run_reef_refresh",
                         class = "refresh_button",
                         label = "",
@@ -131,7 +120,29 @@ observeEvent(input$reefs_panel, {     ## when change panels
                            "Select group:",
                            choices = current_candidates |>
                              pull(group) |> unique())),
-        ),
+        ## if (data_type == "fish") {
+          column(width = 12,
+                            selectInput(paste0(tab_id, "_response_selector"),
+                                        "Select response type:",
+                                        ## choices = reefs_tab_lookup[[tab_name]]$model_type
+                                        choices = current_candidates |>
+                                          pull(model_type) |> unique()
+                                        )
+                          )
+          ## } else {
+          ## column(width = 12,
+          ##        shinyjs::disabled(
+          ##                   selectInput(paste0(tab_id, "_response_selector"),
+          ##                               "Select response:",
+          ##                               choices = reefs_tab_lookup[[tab_name]]$responses
+          ##                               ## choices = current_candidates |>
+          ##                               ##   pull(reef_zone) |> unique()))
+          ##                               )
+          ##                 ),
+          ##        )
+          ## }
+          ),
+
       ## Figure display box
       box(
         class = "panel-box",
@@ -159,6 +170,9 @@ observeEvent(input$reefs_panel, {     ## when change panels
             reactableOutput(outputId = paste0(tab_id, "_annual_tbl")),
             downloadButton(paste0(tab_id, "_annual_download_data"), "Download as csv"),
             downloadButton(paste0(tab_id, "_annual_download_data_posteriors"), "Download posteriors as csv")
+            ## actionButton("generate_zip", "Generate ZIP"),
+            ##  uiOutput("download_ui")  # Placeholder for the download link
+
             ),
           tabPanel(
             title = "Annual group estimates",
@@ -201,64 +215,67 @@ observeEvent(input$reefs_panel, {     ## when change panels
   })  # end of renderUI
 
   observeEvent(c(input[[paste0(tab_id, "_reefs_selector")]]), {
+  ## tab_name <- input$reefs_panel
     reefs_selector <- input[[paste0(tab_id, "_reefs_selector")]]
     data_type <- reefs_tab_lookup[[tab_name]]$data_type
- ## alert(reefs_selector)
-    zones <- config_$models |>
-      filter(data_type == data_type,
-             data_scale == "reef",
-             domain_name == reefs_selector) |>
+    current_candidates <- get_candidates(tab_name, data_type,
+                                         scale = "reef",
+                                         domain = reefs_selector) 
+
+    zones <-
+      current_candidates |> 
       pull(reef_zone) |>
       unique()
-    ## alert(config_$models |>
-    ##   filter(data_type == data_type,
-    ##          data_scale == "reef",
-    ##          domain_name == reefs_selector))
     updateSelectInput(session, paste0(tab_id, "_zone_selector"),
                       choices = zones)
-    depths <- config_$models |>
-      filter(data_type == data_type,
-             data_scale == "reef",
-             domain_name == reefs_selector) |>
+    depths <-
+      current_candidates |> 
       pull(depth) |>
       unique()
-    ## alert(depths)
     updateSelectInput(session, paste0(tab_id, "_depth_selector"),
                       choices = depths)
-
-    groups <- config_$models |>
-      filter(data_type == data_type,
-             data_scale == "reef",
-             domain_name == reefs_selector) |>
+    groups <-
+      current_candidates |> 
       pull(group) |>
       unique()
     updateSelectInput(session, paste0(tab_id, "_group_selector"),
                       choices = groups)
+
+    model_type <-
+      current_candidates |> 
+      pull(model_type) |>
+      unique()
+    updateSelectInput(session, paste0(tab_id, "_response_selector"),
+                      choices = model_type)
+
   }
   )
 
-  observeEvent(input[[paste0(tab_id, "_zone_selector")]], {
-    reefs_selector <- input[[paste0(tab_id, "_reefs_selector")]]
-    data_type <- reefs_tab_lookup[[tab_name]]$data_type
-    depths <- config_$models |>
-      filter(data_type == data_type,
-             data_scale == "reef",
-             domain_name == reefs_selector,
-             reef_zone == input[[paste0(tab_id, "_zone_selector")]]
-             ) |>
-      pull(depth) |>
-      unique()
-    updateSelectInput(session, paste0(tab_id, "_depth_selector"),
-                      choices = depths)
-  }
-  )
-  
+  ## observeEvent(input[[paste0(tab_id, "_zone_selector")]], {
+  ##   reefs_selector <- input[[paste0(tab_id, "_reefs_selector")]]
+  ##   data_type <- reefs_tab_lookup[[tab_name]]$data_type
+  ##   depths <- config_$models |>
+  ##     filter(data_type == data_type,
+  ##            data_scale == "reef",
+  ##            domain_name == reefs_selector,
+  ##            reef_zone == input[[paste0(tab_id, "_zone_selector")]]
+  ##            ) |>
+  ##     pull(depth) |>
+  ##     unique()
+  ##   updateSelectInput(session, paste0(tab_id, "_depth_selector"),
+  ##                     choices = depths)
+  ## }
+  ## )
+
+  if (1 == 1) {
   observeEvent(c(
     input[[paste0(tab_id, "_reefs_selector")]],
     input[[paste0(tab_id, "_shelf_selector")]],
     input[[paste0(tab_id, "_depth_selector")]],
     input[[paste0(tab_id, "_zone_selector")]],
-    input[[paste0(tab_id, "_group_selector")]]), {
+    input[[paste0(tab_id, "_group_selector")]],
+    input[[paste0(tab_id, "_response_selector")]]
+    ), {
 
       reefs_selector <- input[[paste0(tab_id, "_reefs_selector")]]
       shelf_selector <- " " #input[[paste0(tab_id, "_shelf_selector")]]
@@ -266,10 +283,11 @@ observeEvent(input$reefs_panel, {     ## when change panels
       depth_selector <- input[[paste0(tab_id, "_depth_selector")]]
       group_selector <- input[[paste0(tab_id, "_group_selector")]]
       data_type <- reefs_tab_lookup[[tab_name]]$data_type
-
-      ## Raw summaries
-      output[[paste0(tab_id, '_fig')]] <- renderImage({
-        outfile <- paste0("www/figures/gg_",
+      ## if(data_type == "fish") response_selector <- input[[paste0(tab_id, "_response_selector")]]
+      response_selector <- input[[paste0(tab_id, "_response_selector")]]
+      all_reefs <- TRUE
+      file_str_fig_path <- "www/figures/"
+      file_str_fig_body <- paste0( 
                           data_type,
                           "_reef_",
                           reefs_selector,
@@ -282,402 +300,658 @@ observeEvent(input$reefs_panel, {     ## when change panels
                           "_",
                           shelf_selector,
                           "_",
-                          ".png")
-        list(src = outfile,
-             contentType =  "image/png",
-             height = "600px",
-             alt =  "this is alternative text")
-      }, deleteFile = FALSE)
-
-      ## Raw group summaries
-      output[[paste0(tab_id, '_group_fig')]] <- renderImage({
-        outfile <- paste0("www/figures/gg_group_",
-                          data_type,
-                          "_reef_",
-                          reefs_selector,
-                          "_",
-                          group_selector,
-                          "_",
-                          zone_selector,
-                          "_",
-                          depth_selector,
-                          "_",
-                          shelf_selector,
-                          "_",
-                          ".png")
-        list(src = outfile,
-             contentType =  "image/png",
-             height = "600px",
-             alt =  "this is alternative text")
-      }, deleteFile = FALSE)
-
-      
-      ## Partial plots summaries
-      output[[paste0(tab_id, '_raw_fig')]] <- renderImage({
-        outfile <- paste0("www/figures/gg_raw_sum_",
-                          data_type,
-                          "_reef_",
-                          reefs_selector,
-                          "_",
-                          group_selector,
-                          "_",
-                          zone_selector,
-                          "_",
-                          depth_selector,
-                          "_",
-                          shelf_selector,
-                          "_",
-                          ".png")
-        list(src = outfile,
-             contentType =  "image/png",
-             height = "600px",
-             alt =  "this is alternative text")
-      }, deleteFile = FALSE)
-
-      output[[paste0(tab_id, '_raw_fig_cap')]] <- renderText({
-        paste0("www/figures/gg_raw_sum_",
-               data_type,
-               "_reef_",
-               reefs_selector,
-               "_",
-               group_selector,
-               "_",
-               zone_selector,
-               "_",
-               depth_selector,
-               "_",
-               shelf_selector,
-               "_",
-               ".png")
-      })
-
-      output[[paste0(tab_id, '_raw_group_fig')]] <- renderImage({
-        outfile <- paste0("www/figures/gg_raw_group_sum_",
-                          data_type,
-                          "_reef_",
-                          reefs_selector,
-                          "_",
-                          group_selector,
-                          "_",
-                          zone_selector,
-                          "_",
-                          depth_selector,
-                          "_",
-                          shelf_selector,
-                          "_",
-                          ".png")
-        list(src = outfile,
-             contentType =  "image/png",
-             height = "600px",
-             alt =  "this is alternative text")
-      }, deleteFile = FALSE)
-
-      ## Raw data
-      nm5 <- paste0("www/data/modelled/",
-                    data_type,
-                    "_reef_",
-                    reefs_selector,
-                    "_",
-                    group_selector,
-                    "_",
-                    zone_selector,
-                    "_",
-                    depth_selector,
-                    "_",
-                    shelf_selector,
-                    "__",
-                    "raw_data",
-                    ".rds") 
-      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
-        if(file.exists(nm5)) data5 <- readRDS(file = nm5)
-        output[[paste0(tab_id, "_raw_data_tbl")]] <- reactable::renderReactable({
-          make_table(data5, type = "raw_data")
+                          ## ifelse(data_type == "fish", paste0("_", response_selector), ""),
+                          response_selector,
+                          "_ ")
+      ## Raw summary figures
+      if (reefs_selector != "All Reefs") {
+        output[[paste0(tab_id, '_raw_fig')]] <- renderImage({
+          ## list(src = outfile,
+          list(src = paste0(file_str_fig_path, "gg_raw_sum_", file_str_fig_body, ".png"),
+               contentType =  "image/png",
+               height = "600px",
+               alt =  "this is alternative text")
+        }, deleteFile = FALSE)
+        output[[paste0(tab_id, '_raw_fig_cap')]] <- renderText({
+          paste0(file_str_fig_path, "gg_raw_sum_", file_str_fig_body, ".png")
         })
+        output[[paste0(tab_id, '_raw_group_fig')]] <- renderImage({
+          ## list(src = gsub("gg_raw_sum", "gg_raw_group_sum", outfile),
+          list(src = paste0(file_str_fig_path, "gg_raw_group_sum_", file_str_fig_body, ".png"),
+               contentType =  "image/png",
+               height = "600px",
+               alt =  "this is alternative text")
+        }, deleteFile = FALSE)
+      } else if (all_reefs) {
+        output[[paste0(tab_id, '_raw_fig')]] <- NULL
+        output[[paste0(tab_id, '_raw_fig_cap')]] <- renderText( {
+          "Nothing to display when All Reefs selected"})
+        output[[paste0(tab_id, '_raw_group_fig')]] <- NULL 
+      }
+
+      ## Partial plots summaries
+      if (reefs_selector != "All Reefs") {
+        output[[paste0(tab_id, '_fig')]] <- renderImage({
+          list(src = paste0(file_str_fig_path, "gg_", file_str_fig_body, ".png"),
+               contentType =  "image/png",
+               height = "600px",
+               alt =  "this is alternative text")
+        }, deleteFile = FALSE)
+        output[[paste0(tab_id, '_group_fig')]] <- renderImage({
+          list(src = paste0(file_str_fig_path, "gg_group_", file_str_fig_body, ".png"),
+               contentType =  "image/png",
+               height = "600px",
+               alt =  "this is alternative text")
+        }, deleteFile = FALSE)
+      } else if (all_reefs) {
+        output[[paste0(tab_id, '_fig')]] <- NULL
+        output[[paste0(tab_id, '_group_fig')]] <- NULL
+      }
+
+      ## Get the nested model tibble - this must be placed here before others
+      if (reefs_selector != "All Reefs") {
+        model_file <- paste0("www/data/modelled/",
+                             data_type, "_", "reef", "_", reefs_selector, ".rds")
+        if (file.exists(model_file)) {
+          model_tbl <- readRDS(model_file)
+          family_type <- model_tbl |>
+            separate(splits, into = c("reef_zone", "depth", "shelf"), sep = "_") |> 
+            filter(VARIABLE == group_selector,
+                   reef_zone == zone_selector,
+                   depth == depth_selector,
+                   model_type == response_selector,
+                   selected) |>
+            pull(family_type)
+        }
+        
+        file_str_data_path <- "www/data/modelled/"
+        file_str_data_body <- paste0( 
+          data_type,
+          "_reef_",
+          reefs_selector,
+          "_",
+          group_selector,
+          "_",
+          family_type,
+          "_",
+          zone_selector,
+          "_",
+          depth_selector,
+          "_",
+          shelf_selector,
+          "_",
+          response_selector,
+          "_ _")
+        ## Raw data
+        nm5 <- paste0(file_str_data_path, file_str_data_body, "raw_data", ".rds")
+        ## nm5 <- paste0("www/data/modelled/",
+        ##               data_type,
+        ##               "_reef_",
+        ##               reefs_selector,
+        ##               "_",
+        ##               group_selector,
+        ##               "_",
+        ##               family_type,
+        ##               "_",
+        ##               zone_selector,
+        ##               "_",
+        ##               depth_selector,
+        ##               "_",
+        ##               shelf_selector,
+        ##               "_",
+        ##               response_selector,
+        ##               "_ _",
+        ##               "raw_data",
+        ##               ".rds") 
+        if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+          if(file.exists(nm5)) data5 <- readRDS(file = nm5)
+          output[[paste0(tab_id, "_raw_data_tbl")]] <- reactable::renderReactable({
+            make_table(data5, type = "raw_data")
+          })
+          output[[paste0(tab_id, "_raw_data_download_data")]] <- downloadHandler(
+            filename = function() {
+              ## Use the selected dataset as the suggested file name
+              paste0(gsub("raw_data.rds", "raw_data.csv",
+                          gsub("__.*", "_", basename(nm5))))
+              ## paste0("raw_data.csv")
+            },
+            content = function(file) {
+              ## Write the dataset to the `file` that will be downloaded
+              write.csv(data5, file)
+            }
+          )
+          if(file.exists(nm5)) {
+            raw_bits <- data5 |>
+              dplyr::select(Sector, Shelf, NRM_region) |>
+              mutate(AIMS_REEF_NAME = reefs_selector,
+                     GROUP = group_selector,
+                     DEPTH = depth_selector,
+                     FAMILY = reefs_tab_lookup[[tab_name]]$family) |>
+              distinct() 
+          }
+        }
+      } else if (all_reefs) {
+        add_data5 <- get_candidates(tab_name, data_type, scale = "reef") |> 
+          filter(selected_flag == 1) |>
+          mutate(nm = paste0("www/data/modelled/",
+                             paste(data_type, data_scale, domain_name,
+                                   group_selector,
+                                   family_type, zone_selector, depth_selector,
+                                   shelf_selector, response_selector, " ",
+                                   "raw_data.rds", sep = "_"))) |>
+          mutate(raw = map(.x = nm,
+                           .f = ~ {
+                             if (file.exists(.x)) {
+                               readRDS(.x)
+                             } else NULL
+                           })) |>
+          dplyr::select(nm, raw) |>
+          unnest("raw")
+        output[[paste0(tab_id, "_raw_data_tbl")]] <- NULL
+        nm_5 <- find_common_pattern(add_data5$nm) 
+          ## output[[paste0(tab_id, "_raw_data_tbl")]] <- reactable::renderReactable({
+          ##   ## reactable(add_data5)
+          ##   make_table(add_data5, type = "other")
+          ## })
         output[[paste0(tab_id, "_raw_data_download_data")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0("raw_data.csv")
+            paste0(gsub("raw_data.rds", "raw_data.csv",
+                        gsub("__.*", "_", basename(nm_5))))
+            ## paste0("raw_data.csv")
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            write.csv(data5, file)
+            write.csv(add_data5 |> dplyr::select(-nm), file)
           }
         )
-        if(file.exists(nm5)) {
-          raw_bits <- data5 |>
-            dplyr::select(Sector, Shelf, NRM_region) |>
-            mutate(AIMS_REEF_NAME = reefs_selector,
-                   GROUP = group_selector,
-                   DEPTH = depth_selector,
-                   FAMILY = reefs_tab_lookup[[tab_name]]$family) |>
-            distinct() 
-        }
       }
 
       ## Annual summaries
-      nm <- paste0("www/data/modelled/",
-                   data_type,
-                   "_reef_",
-                   reefs_selector,
-                   "_",
-                   group_selector,
-                   "_",
-                   zone_selector,
-                   "_",
-                   depth_selector,
-                   "_",
-                   shelf_selector,
-                   "__",
-                   reefs_tab_lookup[[tab_name]]$family,
-                   "_",
-                   "year_sum",
-                   ".rds") 
-      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
-        if(file.exists(nm)) {
-          data <- readRDS(file = nm)
-          data <- data |>
-            mutate(AIMS_REEF_NAME = reefs_selector) |> 
-            left_join(raw_bits, by = "AIMS_REEF_NAME")
-        }
+      if (reefs_selector != "All Reefs") {
+        nm <- paste0(file_str_data_path, file_str_data_body, "year_sum", ".rds")
+        if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+          if(file.exists(nm)) {
+            data <- readRDS(file = nm)
+            data <- data |>
+              mutate(AIMS_REEF_NAME = reefs_selector) |> 
+              left_join(raw_bits, by = "AIMS_REEF_NAME")
+          }
 
-        output[[paste0(tab_id, "_annual_tbl")]] <- reactable::renderReactable({
-          make_table(data, type = "annual")
-        })
-                 
+          output[[paste0(tab_id, "_annual_tbl")]] <- reactable::renderReactable({
+            make_table(data, type = "annual")
+          })
+          
+          output[[paste0(tab_id, "_annual_download_data")]] <- downloadHandler(
+            filename = function() {
+              ## Use the selected dataset as the suggested file name
+              paste0(gsub("sum.rds", "annual_summary.csv",
+                          gsub("__.*", "_", basename(nm))))
+            },
+            content = function(file) {
+              ## Write the dataset to the `file` that will be downloaded
+              write_csv(data, file)
+            }
+          )
+          output[[paste0(tab_id, "_annual_download_data_posteriors")]] <- downloadHandler(
+            filename = function() {
+              ## Use the selected dataset as the suggested file name
+              paste0(gsub("sum.rds", "annual_posteriors.csv",
+                          gsub("__([^_]*)_.*", "__\\1_", basename(nm))))
+            },
+            content = function(file) {
+              ## Write the dataset to the `file` that will be downloaded
+              data <- readRDS(gsub("sum.rds", "posteriors.rds", nm)) ## |>
+              write_csv(data, file)
+            }
+          )
+        }
+      } else if (all_reefs) {
+        add_data <- get_candidates(tab_name, data_type, scale = "reef") |> 
+          filter(selected_flag == 1) |>
+          filter(group == group_selector,
+                 reef_zone == zone_selector,
+                 depth == depth_selector,
+                 shelf == shelf_selector,
+                 model_type == response_selector) |> 
+          mutate(nm = paste0("www/data/modelled/",
+                             paste(data_type, data_scale, domain_name,
+                                   group,
+                                   family_type, reef_zone, depth,
+                                   shelf, model_type, " ",
+                                   "year_sum.rds", sep = "_"))) |> 
+          dplyr::select(data_type, data_scale, domain_name,
+                        group, family_type, reef_zone, depth,
+                        shelf, model_type, nm
+                        )
+        output[[paste0(tab_id, "_annual_tbl")]] <- NULL
+        ## output[[paste0(tab_id, "_annual_tbl")]] <- reactable::renderReactable({
+        ##   ## reactable(add_data3)
+        ##   make_table(add_data_2 |>
+        ##              dplyr::select(-nm), type = "other")
+        ## })
+        nm_2 <- find_common_pattern(add_data$nm) 
+
         output[[paste0(tab_id, "_annual_download_data")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0(gsub("__.*", "_", basename(nm)), "annual_summary.csv")
+            paste0(gsub("sum.rds", "annual_summary.csv",
+                        gsub("__.*", "_", basename(nm_2))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            write_csv(data, file)
+            add_data_2 <- add_data |> 
+              mutate(dat =  map(.x = nm, .f = ~readRDS(.x))) |>
+              unnest(dat)  
+
+            write_csv(add_data_2, file)
           }
         )
         output[[paste0(tab_id, "_annual_download_data_posteriors")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "annual_posteriors.csv")
+            paste0(gsub("sum.rds", "annual_posteriors.csv",
+                        gsub("__([^_]*)_.*", "__\\1_", basename(nm_2))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm)) ## |>
-              ## mutate(AIMS_REEF_NAME = reefs_selector,
-              ##        DATA_TYPE = data_type,
-              ##        )
-            write_csv(data, file)
+            add_data_3 <- add_data |> 
+              mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
+                                .f = ~readRDS(.x))) |>
+              unnest(dat)  |>
+              dplyr::select(-nm)
+            write_csv(add_data_3, file)
           }
         )
       }
 
       ## Annual group summaries
-      nm2 <- paste0("www/data/modelled/",
-                    data_type,
-                    "_reef_",
-                    reefs_selector,
-                    "_",
-                    group_selector,
-                    "_",
-                    zone_selector,
-                    "_",
-                    depth_selector,
-                    "_",
-                    shelf_selector,
-                    "__",
-                   reefs_tab_lookup[[tab_name]]$family,
-                   "_",
-                    "year_group_sum",
-                    ".rds") 
-      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
-        if(file.exists(nm2)) data2 <- readRDS(file = nm2)
-        output[[paste0(tab_id, "_annual_group_tbl")]] <- reactable::renderReactable({
-          make_table(data2, type = "annual_group")
-        })
+      if (reefs_selector != "All Reefs") {
+        nm2 <- paste0(file_str_data_path, file_str_data_body, "year_group_sum", ".rds")
+        if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+          if(file.exists(nm2)) {
+            data2 <- readRDS(file = nm2)
+            data2 <- data2 |>
+              mutate(AIMS_REEF_NAME = reefs_selector) |> 
+              left_join(raw_bits |> dplyr::select(-GROUP), by = "AIMS_REEF_NAME")
+            output[[paste0(tab_id, "_annual_group_tbl")]] <- reactable::renderReactable({
+              make_table(data2, type = "annual_group")
+            })
 
-        if(file.exists(nm2)) {
-          data2 <- data2 |>
-            mutate(AIMS_REEF_NAME = reefs_selector) |> 
-            left_join(raw_bits, by = "AIMS_REEF_NAME")
+            output[[paste0(tab_id, "_annual_group_download_data")]] <- downloadHandler(
+              filename = function() {
+              paste0(gsub("year_group_sum.rds", "year_group_summary.csv",
+                          gsub("__.*", "_", basename(nm2))))
+                ## paste0(gsub("__.*", "_", basename(nm2)), "annual_group_summary.csv")
+              },
+              content = function(file) {
+                write.csv(data2, file)
+              }
+            )
+            output[[paste0(tab_id, "_annual_group_download_data_posteriors")]] <- downloadHandler(
+              filename = function() {
+              paste0(gsub("year_group_sum.rds", "annual_group_posteriors.csv",
+                          gsub("__.*", "_", basename(nm2))))
+                ## paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm2)), "annual_group_posteriors.csv")
+              },
+              content = function(file) {
+                data <- readRDS(gsub("sum.rds", "posteriors.rds", nm2)) ## |>
+                ## mutate(AIMS_REEF_NAME = reefs_selector,
+                ##        DATA_TYPE = data_type,
+                ##        )
+                write_csv(data, file)
+              }
+            )
+          }
         }
+      } else if (all_reefs) {
+        output[[paste0(tab_id, "_annual_group_tbl")]] <- NULL 
+        add_data2 <- get_candidates(tab_name, data_type, scale = "reef") |> 
+          filter(selected_flag == 1) |>
+          filter(group == group_selector,
+                 reef_zone == zone_selector,
+                 depth == depth_selector,
+                 shelf == shelf_selector,
+                 model_type == response_selector) |> 
+          mutate(nm = paste0("www/data/modelled/",
+                             paste(data_type, data_scale, domain_name,
+                                   group,
+                                   family_type, reef_zone, depth,
+                                   shelf, model_type, " ",
+                                   "year_group_sum.rds", sep = "_"))) |> 
+          dplyr::select(data_type, data_scale, domain_name,
+                        group, family_type, reef_zone, depth,
+                        shelf, model_type, nm
+                        )
+
+        nm2_2 <- find_common_pattern(add_data2$nm) 
+
         output[[paste0(tab_id, "_annual_group_download_data")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0(gsub("__.*", "_", basename(nm)), "annual_group_summary.csv")
+            paste0(gsub("sum.rds", "annual_group_summary.csv",
+                        gsub("__.*", "_", basename(nm2_2))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            write.csv(data2, file)
+            add_data2_2 <- add_data2 |> 
+              mutate(dat =  map(.x = nm, .f = ~readRDS(.x))) |>
+              unnest(dat)  
+            write_csv(add_data2_2 |> dplyr::select(-nm), file)
           }
         )
         output[[paste0(tab_id, "_annual_group_download_data_posteriors")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm2)), "annual_group_posteriors.csv")
+            paste0(gsub("sum.rds", "annual_group_posteriors.csv",
+                        gsub("__([^_]*)_.*", "__\\1_", basename(nm2_2))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm2)) ## |>
-              ## mutate(AIMS_REEF_NAME = reefs_selector,
-              ##        DATA_TYPE = data_type,
-              ##        )
-            write_csv(data, file)
+            add_data2_3 <- add_data2 |> 
+              mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
+                                .f = ~readRDS(.x))) |>
+              unnest(dat)  |>
+              dplyr::select(-nm)
+            write_csv(add_data2_3, file)
           }
         )
       }
 
-     
       ## All Annual comparison summaries
-      nm3a <- paste0("www/data/modelled/",
-                    data_type,
-                    "_reef_",
-                    reefs_selector,
-                    "_",
-                    group_selector,
-                    "_",
-                    zone_selector,
-                    "_",
-                    depth_selector,
-                    "_",
-                    shelf_selector,
-                    "__",
-                   reefs_tab_lookup[[tab_name]]$family,
-                   "_",
-                    "all_yearcomp_sum",
-                    ".rds") 
-      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
-        if(file.exists(nm3a)) data3a <- readRDS(file = nm3a)
-        output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- reactable::renderReactable({
-          make_table(data3a, type = "all_annual_comp")
-        })
-        if(file.exists(nm3a)) {
-          data3a <- data3a |>
-            mutate(AIMS_REEF_NAME = reefs_selector) |> 
-            left_join(raw_bits, by = "AIMS_REEF_NAME")
+      if (reefs_selector != "All Reefs") {
+        nm3a <- paste0(file_str_data_path, file_str_data_body, "all_yearcomp_sum", ".rds")
+        if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+          if(file.exists(nm3a)) data3a <- readRDS(file = nm3a)
+          output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- reactable::renderReactable({
+            make_table(data3a, type = "all_annual_comp")
+          })
+          if(file.exists(nm3a)) {
+            data3a <- data3a |>
+              mutate(AIMS_REEF_NAME = reefs_selector) |> 
+              left_join(raw_bits, by = "AIMS_REEF_NAME")
+          }
+          output[[paste0(tab_id, "_all_annual_comp_download_data")]] <- downloadHandler(
+            filename = function() {
+              paste0(gsub("all_yearcomp_sum.rds", "all_annual_comp_summary.csv",
+                          gsub("__.*", "_", basename(nm3a))))
+            },
+            content = function(file) {
+              write.csv(data3a, file)
+            }
+          )
+          output[[paste0(tab_id, "_all_annual_comp_download_data_posteriors")]] <- downloadHandler(
+            filename = function() {
+              paste0(gsub("all_yearcomp_sum.rds", "all_annual_comp_posteriors.csv",
+                          gsub("__([^_]*)_.*", "__\\1_", basename(nm3a))))
+            },
+            content = function(file) {
+              data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3a)) ## |>
+              write_csv(data, file)
+            }
+          )
         }
+      } else if (all_reefs) {
+        add_data_3 <- get_candidates(tab_name, data_type, scale = "reef") |> 
+          filter(selected_flag == 1) |>
+          filter(group == group_selector,
+                 reef_zone == zone_selector,
+                 depth == depth_selector,
+                 shelf == shelf_selector,
+                 model_type == response_selector) |> 
+          mutate(nm = paste0("www/data/modelled/",
+                             paste(data_type, data_scale, domain_name,
+                                   group,
+                                   family_type, reef_zone, depth,
+                                   shelf, model_type, " ",
+                                   "all_yearcomp_sum.rds", sep = "_"))) |> 
+          dplyr::select(data_type, data_scale, domain_name,
+                        group, family_type, reef_zone, depth,
+                        shelf, model_type, nm
+                        )
+        ## alert(add_data_3$nm)
+
+        output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- NULL
+        ## output[[paste0(tab_id, "_all_annual_comp_tbl")]] <- reactable::renderReactable({
+        ##   ## reactable(add_data3)
+        ##   make_table(add_data_3a |>
+        ##              dplyr::select(-nm), type = "other")
+        ## })
+        nm_3a <- find_common_pattern(add_data_3$nm) 
+
         output[[paste0(tab_id, "_all_annual_comp_download_data")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            ## paste0("annual_comp.csv")
-            paste0(gsub("__.*", "_", basename(nm)), "all_nnual_comp_summary.csv")
+            paste0(gsub("all_yearcomp_sum.rds", "all_annual_yearcomp_summary.csv",
+                        gsub("__.*", "_", basename(nm_3a))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            write.csv(data3a, file)
+        add_data_3a <- add_data_3 |> 
+          mutate(dat =  map(.x = nm, .f = ~ {
+            if (!file.exists(.x)) return(NULL)
+            readRDS(.x)
+          })) |>
+          unnest(dat)  
+            write_csv(add_data_3a |> dplyr::select(-nm), file)
           }
         )
         output[[paste0(tab_id, "_all_annual_comp_download_data_posteriors")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "all_annual_comp_posteriors.csv")
+            paste0(gsub("all_yearcomp_sum.rds", "all_annual_yearcomp_posteriors.csv",
+                        gsub("__([^_]*)_.*", "__\\1_", basename(nm_3a))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3a)) ## |>
-              ## mutate(AIMS_REEF_NAME = reefs_selector,
-              ##        DATA_TYPE = data_type,
-              ##        )
-            write_csv(data, file)
+            add_data_3b <- add_data_3 |> 
+              mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
+                                .f = ~readRDS(.x))) |>
+              unnest(dat)  |>
+              dplyr::select(-nm)
+            write_csv(add_data_3b, file)
           }
         )
       }
 
+
       ## Annual comparison summaries (Comparison to most recent year)
-      nm3 <- paste0("www/data/modelled/",
-                    data_type,
-                    "_reef_",
-                    reefs_selector,
-                    "_",
-                    group_selector,
-                    "_",
-                    zone_selector,
-                    "_",
-                    depth_selector,
-                    "_",
-                    shelf_selector,
-                    "__",
-                   reefs_tab_lookup[[tab_name]]$family,
-                   "_",
-                    "yearcomp_sum",
-                    ".rds") 
-      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
-        if(file.exists(nm3)) data3 <- readRDS(file = nm3)
-        output[[paste0(tab_id, "_annual_comp_tbl")]] <- reactable::renderReactable({
-          make_table(data3, type = "annual_comp")
-        })
-        if(file.exists(nm3)) {
-          data3 <- data3 |>
-            mutate(AIMS_REEF_NAME = reefs_selector) |> 
-            left_join(raw_bits, by = "AIMS_REEF_NAME")
+      if (reefs_selector != "All Reefs") {
+        nm3 <- paste0(file_str_data_path, file_str_data_body, "yearcomp_sum", ".rds")
+        ## nm3 <- paste0("www/data/modelled/",
+        ##               data_type,
+        ##               "_reef_",
+        ##               reefs_selector,
+        ##               "_",
+        ##               group_selector,
+        ##               "_",
+        ##               family_type,
+        ##               "_",
+        ##               zone_selector,
+        ##               "_",
+        ##               depth_selector,
+        ##               "_",
+        ##               shelf_selector,
+        ##               "_",
+        ##               response_selector,
+        ##               "_ _",
+        ##               "yearcomp_sum",
+        ##               ".rds") 
+        if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+          if(file.exists(nm3)) {
+            data3 <- readRDS(file = nm3)
+            data3 <- data3 |>
+              mutate(AIMS_REEF_NAME = reefs_selector) |> 
+              left_join(raw_bits, by = "AIMS_REEF_NAME")
+            output[[paste0(tab_id, "_annual_comp_tbl")]] <- reactable::renderReactable({
+              make_table(data3, type = "annual_comp")
+            })
+            output[[paste0(tab_id, "_annual_comp_download_data")]] <- downloadHandler(
+              filename = function() {
+                paste0(gsub("yearcomp_sum.rds", "annual_comp_summary.csv",
+                            gsub("__.*", "_", basename(nm3))))
+              },
+              content = function(file) {
+                write.csv(data3, file)
+              }
+            )
+            output[[paste0(tab_id, "_annual_comp_download_data_posteriors")]] <- downloadHandler(
+              filename = function() {
+              paste0(gsub("yearcomp_sum.rds", "annual_comp_posteriors.csv",
+                          gsub("__([^_]*)_.*", "__\\1_", basename(nm3))))
+              },
+              content = function(file) {
+                data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3)) ## |>
+                write_csv(data, file)
+              }
+            )
+          }
         }
+      } else if (all_reefs) {
+        add_data_3_1 <- get_candidates(tab_name, data_type, scale = "reef") |> 
+          filter(selected_flag == 1) |>
+          filter(group == group_selector,
+                 reef_zone == zone_selector,
+                 depth == depth_selector,
+                 shelf == shelf_selector,
+                 model_type == response_selector) |> 
+          mutate(nm = paste0("www/data/modelled/",
+                             paste(data_type, data_scale, domain_name,
+                                   group,
+                                   family_type, reef_zone, depth,
+                                   shelf, model_type, " ",
+                                   "yearcomp_sum.rds", sep = "_"))) |> 
+          dplyr::select(data_type, data_scale, domain_name,
+                        group, family_type, reef_zone, depth,
+                        shelf, model_type, nm
+                        )
+        add_data_3_1a <- add_data_3_1 |> 
+          mutate(dat =  map(.x = nm, .f = ~ {
+            if (!file.exists(.x)) return(NULL)
+            readRDS(.x)
+            })) |>
+          unnest(dat)  
+
+        output[[paste0(tab_id, "_annual_comp_tbl")]] <- NULL
+        nm_3_1a <- find_common_pattern(add_data_3_1a$nm) 
+
         output[[paste0(tab_id, "_annual_comp_download_data")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            ## paste0("annual_comp.csv")
-            paste0(gsub("__.*", "_", basename(nm)), "annual_comp_summary.csv")
+            paste0(gsub("yearcomp_sum.rds", "annual_yearcomp_summary.csv",
+                        gsub("__.*", "_", basename(nm_3_1a))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            write.csv(data3, file)
+            write_csv(add_data_3_1a |> dplyr::select(-nm), file)
           }
         )
         output[[paste0(tab_id, "_annual_comp_download_data_posteriors")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0(gsub("__([^_]*)_.*", "__\\1_", basename(nm)), "annual_comp_posteriors.csv")
+            paste0(gsub("yearcomp_sum.rds", "annual_yearcomp_posteriors.csv",
+                        gsub("__([^_]*)_.*", "__\\1_", basename(nm_3_1a))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            data <- readRDS(gsub("sum.rds", "posteriors.rds", nm3)) ## |>
-              ## mutate(AIMS_REEF_NAME = reefs_selector,
-              ##        DATA_TYPE = data_type,
-              ##        )
-            write_csv(data, file)
+            add_data_3_1b <- add_data_3_1a |> 
+              mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
+                                .f = ~readRDS(.x))) |>
+              unnest(dat)  |>
+              dplyr::select(-nm)
+            write_csv(add_data_3_1b, file)
           }
         )
       }
 
-    ## Raw summaries
-    nm4 <- paste0("www/data/modelled/",
-                 data_type,
-                 "_reef_",
-                 reefs_selector,
-                 "_",
-                 group_selector,
-                 "_",
-                 zone_selector,
-                 "_",
-                 depth_selector,
-                 "_",
-                 shelf_selector,
-                 "__",
-                 "raw_sums",
-                 ".rds") 
-      if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
-        if(file.exists(nm4)) data4 <- readRDS(file = nm4)
-        output[[paste0(tab_id, "_raw_sum_tbl")]] <- reactable::renderReactable({
-          make_table(data4, type = "raw_sum")
-        })
-        if(file.exists(nm4)) {
-          data4 <- data4 |>
-            mutate(AIMS_REEF_NAME = reefs_selector) |> 
-            left_join(raw_bits, by = "AIMS_REEF_NAME")
+
+      ## Raw aggregations summaries
+      if (reefs_selector != "All Reefs") {
+        nm4 <- paste0(file_str_data_path, file_str_data_body, "raw_sums", ".rds")
+        if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
+          if(file.exists(nm4)) data4 <- readRDS(file = nm4)
+          output[[paste0(tab_id, "_raw_sum_tbl")]] <- reactable::renderReactable({
+            make_table(data4, type = "raw_sum")
+          })
+          if(file.exists(nm4)) {
+            data4 <- data4 |>
+              mutate(AIMS_REEF_NAME = reefs_selector) |> 
+              left_join(raw_bits, by = "AIMS_REEF_NAME")
+          }
+          output[[paste0(tab_id, "_raw_sum_download_data")]] <- downloadHandler(
+            filename = function() {
+              paste0(gsub("raw_sums.rds", "raw_sums.csv",
+                          gsub("__.*", "_", basename(nm4))))
+            },
+            content = function(file) {
+              write.csv(data4, file)
+            }
+          )
         }
+      } else if (all_reefs) {
+        add_data4 <- get_candidates(tab_name, data_type, scale = "reef") |> 
+          filter(selected_flag == 1) |>
+          mutate(nm = paste0("www/data/modelled/",
+                             paste(data_type, data_scale, domain_name,
+                                   group_selector,
+                                   family_type, zone_selector, depth_selector,
+                                   shelf_selector, response_selector, " ",
+                                   "raw_sums.rds", sep = "_"))) |>
+          mutate(raw = map(.x = nm,
+                           .f = ~ {
+                             if (file.exists(.x)) {
+                               readRDS(.x)
+                             } else NULL
+                           })) |>
+          dplyr::select(nm, raw) |>
+          unnest("raw")
+        output[[paste0(tab_id, "_raw_sum_tbl")]] <- NULL
+        nm_4 <- find_common_pattern(add_data4$nm) 
         output[[paste0(tab_id, "_raw_sum_download_data")]] <- downloadHandler(
           filename = function() {
-            ## Use the selected dataset as the suggested file name
-            paste0("raw_sum.csv")
+            paste0(gsub("raw_sums.rds", "raw_sums.csv",
+                        gsub("__.*", "_", basename(nm_4))))
           },
           content = function(file) {
-            ## Write the dataset to the `file` that will be downloaded
-            write.csv(data4, file)
+            write.csv(add_data4 |> dplyr::select(-nm), file)
           }
         )
       }
-
-
     })
-
+  }
 })
+
+download_posterior <- function(button_id, full_name, rds_name, csv_name, dat) {
+  output[[button_id]] <- downloadHandler(
+    filename = function() {
+      ## Use the selected dataset as the suggested file name
+      paste0(gsub(rds_name, csv_name,
+                  gsub("__.*", "_", basename(full_name))))
+    },
+    content = function(file) {
+      ## Write the dataset to the `file` that will be downloaded
+      write_csv(dat, file)
+    }
+  )
+}
+
+download_summary <- function(button_id, full_name, rds_name, csv_name, dat) {
+          output[[button_id]] <- downloadHandler(
+            filename = function() {
+              ## Use the selected dataset as the suggested file name
+              ## paste0("annual_comp.csv")
+              paste0(gsub("__.*", "_", basename(full_name)), csv_name)
+            },
+            content = function(file) {
+              ## Write the dataset to the `file` that will be downloaded
+              write.csv(dat, file)
+            }
+          )
+}
+
+
+find_common_pattern <- function(strings) {
+  # Split each string into parts based on "_"
+  split_strings <- strsplit(strings, "_", fixed = TRUE)
+  
+  # Find the length of the shortest split (to avoid index errors)
+  min_length <- min(sapply(split_strings, length))
+  
+  # Compare elements at each position
+  result <- sapply(seq_len(min_length), function(i) {
+    elements <- sapply(split_strings, `[`, i)
+    if (all(elements == elements[1])) {
+      return(elements[1])  # Keep common elements
+    } else {
+      return(" ")  # Replace differing elements with "*"
+    }
+  })
+  
+  # Collapse into a single string
+  paste(result, collapse = "_")
+}
 
 
 make_table <- function(data, type = "annual") {
@@ -717,3 +991,4 @@ make_table <- function(data, type = "annual") {
       )
     )
 }
+

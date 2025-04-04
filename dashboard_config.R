@@ -28,9 +28,6 @@ config_$meta <- tibble(path = fls) |>
            sep = "/", remove = FALSE) |>
   dplyr::select(-matches("X[0-9]"))
 
-  
-
-
 
 ## config_$meta |> as.data.frame() |> head()
 ## config_$meta |> dim()
@@ -84,7 +81,10 @@ if(!file.exists(config_$db_file)) {
              )
   saveRDS(db, file = config_$db_file)
 }
+
   
+
+
 ## config_$db_path <- paste0(config_$data_path, "dashboard.sqlite")
 ## What if the database does not exist
 con <- dbConnect(RSQLite::SQLite(), config_$db_path)
@@ -112,7 +112,6 @@ dbDisconnect(con)
 system(paste("chmod ug+rw", config_$db_path))
 
 
-if (1 == 1) {
 
 ## system(sprintf("sqlite3 %s '.mode csv' '.import %s %s'", db_path, csv_file, table_name))
 ## system("sqlite3 dashboard.sqlite 'PRAGMA table_info(pt);'")
@@ -152,11 +151,11 @@ get_db_model_data<- function(method = NULL, scale = NULL, domain = NULL) {
 ##    2.2. join in metadata
 ## 3. replace model database
 get_config_models <- function() {
-      ## sink(file = "/home/mlogan/data/AAAA.txt")
+  ## sink(file = "/home/mlogan/data/AAAA.txt")
   ## Start by gleaning the info by scanning through the models folders
   fls <- list.files(config_$model_path,
                     recursive = TRUE, full.names = TRUE)
-  ## write.csv(fls, file = "../data/temp1.csv")
+  ## write.csv(data.frame(config_$model_path), file = "../data/temp1.csv")
   fls_wch <- str_detect(basename(fls), "^[^_]*_[^_]*_[^_]*\\.rds$")
   ## write.csv(fls_wch, file = "../data/temp2.csv")
   if (length(fls_wch) > 0) {
@@ -171,6 +170,7 @@ get_config_models <- function() {
                          tibble(str = ss) |>
                            separate(str, into = c("data_type", "data_scale",
                                                   "domain_name", "group",
+                                                  "family_type",
                                                   "reef_zone", "depth",
                                                   "shelf"),
                                     sep = "_") |>
@@ -205,6 +205,7 @@ get_config_models <- function() {
                          "data_scale" = "data_scale",
                          "domain_name" = "domain_name",
                          "group" = "group",
+                         "family_type" = "family_type",
                          "reef_zone" = "reef_zone",
                          "depth" = "depth",
                          "shelf")) 
@@ -213,14 +214,14 @@ get_config_models <- function() {
       ## cat("asdfkj\n")
       ## sink()
     }
-    write_csv(models, file = paste0(config_$data_path, "models.csv")) 
+    ## write_csv(models, file = paste0(config_$data_path, "models.csv")) 
       ## sink()
     ## alert(models |> filter(domain_name == "Reef 14-133"))
     return(models)
   } else {
     ## need to put something in here incase no models have been run ever
     ## return(tibble(model_path = "", data_type = "", data_scale = "", domain_name = "",
-    ##               group = "", reef_zone = "", depth = "", shelf = "", model_date = "",
+    ##               group = "", "family_type" = "", reef_zone = "", depth = "", shelf = "", model_date = "",
     ##               sector_model_data_hash = "", nrm_model_data_hash = "",
     ##               path = "",
     ##               reef_model_data_hash = ""))
@@ -228,6 +229,7 @@ get_config_models <- function() {
 }
 
 config_$models <- get_config_models() 
+
 
 assign("config_", config_, envir = .GlobalEnv)
 
@@ -250,10 +252,9 @@ toggle_buttons <- function(on = NULL, off = NULL, success = NULL) {
  }
 }
 
-con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
-dbDisconnect(con)
+## if (!is.null(config_$models)) {
+##   con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+##   copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
+##   dbDisconnect(con)
+## }
 
-}
-
-  
