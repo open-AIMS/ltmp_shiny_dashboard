@@ -31,6 +31,7 @@ sector_tab_lookup <- list(
     ## shelfs = c("Inshore", "Offshore"),
     groups = c("Harvested", "Herbivores", "Coral Trout",
                "Large fishes", "Damselfishes"),
+    sub_model = c("restricted", "extended"),
     response = ""
   )
 )
@@ -108,7 +109,16 @@ observeEvent(input$sector_panel, {     ## when change panels
                                         choices = current_candidates |>
                                           pull(model_type) |> unique()
                                         )
+                          ),
+          column(width = 12,
+                            selectInput(paste0(tab_id, "_sub_model_selector"),
+                                        "Select sub model:",
+                                        ## choices = reefs_tab_lookup[[tab_name]]$model_type
+                                        choices = current_candidates |>
+                                          pull(sub_model) |> unique()
+                                        )
                           )
+
          ## }},
         ),
       ## Figure display box
@@ -179,7 +189,7 @@ observeEvent(input$sector_panel, {     ## when change panels
 
   observeEvent(c(input[[paste0(tab_id, "_sector_selector")]]), {
     sector_selector <- input[[paste0(tab_id, "_sector_selector")]]
-    tab_id <- sector_tab_lookup[[tab_name]]$outputId
+    ## tab_id <- sector_tab_lookup[[tab_name]]$outputId
     data_types <- sector_tab_lookup[[tab_name]]$data_type
     current_candidates <- get_candidates(tab_name, data_types,
                                          scale = "sector",
@@ -218,6 +228,17 @@ observeEvent(input$sector_panel, {     ## when change panels
       unique()
     updateSelectInput(session, paste0(tab_id, "_response_selector"),
                       choices = model_type)
+
+    ## alert(colnames(current_candidates))
+    sub_model <-
+      current_candidates |> 
+      filter(domain_name == sector_selector) |> 
+      pull(sub_model) |>
+      unique()
+    ## alert(sub_model)
+    updateSelectInput(session, paste0(tab_id, "_sub_model_selector"),
+                      choices = sub_model,
+                      selected = sub_model[1])
   }
   )
 
@@ -225,7 +246,8 @@ observeEvent(input$sector_panel, {     ## when change panels
     input[[paste0(tab_id, "_sector_selector")]],
     ## input[[paste0(tab_id, "_shelf_selector")]],
     input[[paste0(tab_id, "_group_selector")]],
-    input[[paste0(tab_id, "_response_selector")]]
+    input[[paste0(tab_id, "_response_selector")]],
+    input[[paste0(tab_id, "_sub_model_selector")]]
   ), {
 
       sector_selector <- input[[paste0(tab_id, "_sector_selector")]]
@@ -233,6 +255,7 @@ observeEvent(input$sector_panel, {     ## when change panels
       group_selector <- input[[paste0(tab_id, "_group_selector")]]
       data_type <- sector_tab_lookup[[tab_name]]$data_type
       response_selector <- input[[paste0(tab_id, "_response_selector")]]
+      sub_model_selector <- input[[paste0(tab_id, "_sub_model_selector")]]
 
       all_sectors <- TRUE
       file_str_fig_path <- "www/figures/"
@@ -250,7 +273,9 @@ observeEvent(input$sector_panel, {     ## when change panels
                           " ", #shelf_selector,
                           "_",
                           response_selector,
-                          "_ ")
+        "_",
+        sub_model_selector
+        )
 
       ## Raw summary figures
       if (sector_selector != "All Sectors") {
@@ -287,12 +312,15 @@ observeEvent(input$sector_panel, {     ## when change panels
         model_file <- paste0("www/data/modelled/",
                              data_type, "_", "Sectors", "_", sector_selector, ".rds")
         if (file.exists(model_file)) {
-          model_tbl <- readRDS(model_file)
+          model_tbl <- readRDS(model_file) |> 
+            mutate(sub_model = ifelse(is.na(sub_model), " ", sub_model))
           family_type <- model_tbl |>
             filter(VARIABLE == group_selector,
                    model_type == response_selector,
+                   sub_model == sub_model_selector,
                    selected) |>
             pull(family_type)
+          if (length(family_type>1)) family_type <- family_type[1]  ## this is a temporary measure while transitioning to all fish having sub_model
         }
         file_str_data_path <- "www/data/modelled/"
         file_str_data_body <- paste0( 
@@ -311,7 +339,9 @@ observeEvent(input$sector_panel, {     ## when change panels
           " ", #shelf_selector,
           "_",
           response_selector,
-          "_ _")
+          "_",
+          sub_model_selector,
+          "_")
         nm5 <- paste0(file_str_data_path, file_str_data_body, "raw_data", ".rds")
         if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
           if(file.exists(nm5)) data5 <- readRDS(file = nm5)
@@ -346,7 +376,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                                    domain_name,
                                    group_selector,
                                    family_type, " ", " ",
-                                   " ", response_selector, " ",
+                                   " ", response_selector, sub_model_selector,
                                    "raw_data.rds", sep = "_"))) |>
           mutate(raw = map(.x = nm,
                            .f = ~ {
@@ -407,7 +437,8 @@ observeEvent(input$sector_panel, {     ## when change panels
           filter(selected_flag == 1) |>
           filter(group == group_selector,
                  ## reef_zone == zone_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -415,11 +446,11 @@ observeEvent(input$sector_panel, {     ## when change panels
                                    domain_name,
                                    group,
                                    family_type, " ", " ",
-                                   " ", model_type, " ",
+                                   " ", model_type, sub_model,
                                    "year_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
 
         output[[paste0(tab_id, "_annual_tbl")]] <- NULL
@@ -493,7 +524,8 @@ observeEvent(input$sector_panel, {     ## when change panels
         add_data2 <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
           filter(group == group_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model ==  sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -501,11 +533,11 @@ observeEvent(input$sector_panel, {     ## when change panels
                                    domain_name,
                                    group,
                                    family_type, reef_zone, depth,
-                                   shelf, model_type, " ",
+                                   shelf, model_type, sub_model,
                                    "year_group_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
 
         nm2_2 <- find_common_pattern(add_data2$nm) 
@@ -577,7 +609,8 @@ observeEvent(input$sector_panel, {     ## when change panels
         add_data_3 <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
           filter(group == group_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model ==  sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -585,11 +618,11 @@ observeEvent(input$sector_panel, {     ## when change panels
                                    domain_name,
                                    group,
                                    family_type, reef_zone, depth,
-                                   shelf, model_type, " ",
+                                   shelf, model_type, sub_model,
                                    "all_yearcomp_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
         ## alert(add_data_3$nm)
 
@@ -671,7 +704,8 @@ observeEvent(input$sector_panel, {     ## when change panels
         add_data_3_1 <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
           filter(group == group_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -679,11 +713,11 @@ observeEvent(input$sector_panel, {     ## when change panels
                                    domain_name,
                                    group,
                                    family_type, reef_zone, depth,
-                                   shelf, model_type, " ",
+                                   shelf, model_type, sub_model,
                                    "yearcomp_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
 
         output[[paste0(tab_id, "_annual_comp_tbl")]] <- NULL
@@ -750,7 +784,7 @@ observeEvent(input$sector_panel, {     ## when change panels
                                    domain_name,
                                    group_selector,
                                    family_type, " ", " ",
-                                   " ", response_selector, " ",
+                                   " ", response_selector, sub_model_selector,
                                    "raw_sums.rds", sep = "_"))) |>
           mutate(raw = map(.x = nm,
                            .f = ~ {

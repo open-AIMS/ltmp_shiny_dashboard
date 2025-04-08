@@ -32,6 +32,7 @@ nrm_tab_lookup <- list(
     shelfs = c("Inshore", "Offshore"),
     groups = c("Harvested", "Herbivores", "Coral Trout",
                "Large fishes", "Damselfishes"),
+    sub_model = c("restricted", "extended"),
     response = ""
   )
 )
@@ -114,6 +115,14 @@ observeEvent(input$nrm_panel, {     ## when change panels
                                         ## choices = reefs_tab_lookup[[tab_name]]$model_type
                                         choices = current_candidates |>
                                           pull(model_type) |> unique()
+                                        )
+                          ),
+          column(width = 12,
+                            selectInput(paste0(tab_id, "_sub_model_selector"),
+                                        "Select sub model:",
+                                        ## choices = reefs_tab_lookup[[tab_name]]$model_type
+                                        choices = current_candidates |>
+                                          pull(sub_model) |> unique()
                                         )
                           )
         ),
@@ -206,6 +215,15 @@ observeEvent(input$nrm_panel, {     ## when change panels
       unique()
     updateSelectInput(session, paste0(tab_id, "_response_selector"),
                       choices = model_type)
+    sub_model <-
+      current_candidates |> 
+      filter(domain_name == nrm_selector) |> 
+      pull(sub_model) |>
+      unique()
+    ## alert(sub_model)
+    updateSelectInput(session, paste0(tab_id, "_sub_model_selector"),
+                      choices = sub_model,
+                      selected = sub_model[1])
   }
   )
 
@@ -214,7 +232,8 @@ observeEvent(input$nrm_panel, {     ## when change panels
     input[[paste0(tab_id, "_nrm_selector")]],
     input[[paste0(tab_id, "_shelf_selector")]],
     input[[paste0(tab_id, "_group_selector")]],
-    input[[paste0(tab_id, "_response_selector")]]
+    input[[paste0(tab_id, "_response_selector")]],
+    input[[paste0(tab_id, "_sub_model_selector")]]
   ), {
 
       nrm_selector <- input[[paste0(tab_id, "_nrm_selector")]]
@@ -222,24 +241,27 @@ observeEvent(input$nrm_panel, {     ## when change panels
       group_selector <- input[[paste0(tab_id, "_group_selector")]]
       data_type <- nrm_tab_lookup[[tab_name]]$data_type
       response_selector <- input[[paste0(tab_id, "_response_selector")]]
+      sub_model_selector <- input[[paste0(tab_id, "_sub_model_selector")]]
 
       all_nrms <- TRUE
       file_str_fig_path <- "www/figures/"
       file_str_fig_body <- paste0( 
-                          data_type,
-                          "_nrm_",
-                          nrm_selector,
-                          "_",
-                          group_selector,
-                          "_",
-                          " ",  ## ghost zone
-                          "_",
-                          " ",  ## ghost depth
-                          "_",
-                          shelf_selector,
-                          "_",
-                          response_selector,
-                          "_ ")
+        data_type,
+        "_nrm_",
+        nrm_selector,
+        "_",
+        group_selector,
+        "_",
+        " ",  ## ghost zone
+        "_",
+        " ",  ## ghost depth
+        "_",
+        shelf_selector,
+        "_",
+        response_selector,
+        "_",
+        sub_model_selector
+      )
       ## Raw summary figures
       if (nrm_selector != "All NRMs")  {
         output[[paste0(tab_id, '_raw_fig')]] <- renderImage({
@@ -290,13 +312,15 @@ observeEvent(input$nrm_panel, {     ## when change panels
         model_file <- paste0("www/data/modelled/",
                              data_type, "_", "nrm", "_", nrm_selector, ".rds")
         if (file.exists(model_file)) {
-          model_tbl <- readRDS(model_file)
+          model_tbl <- readRDS(model_file) |> 
+            mutate(sub_model = ifelse(is.na(sub_model), " ", sub_model))
           family_type <- model_tbl |>
             unnest("splits") |>
             separate(splits, into = c("reef_zone", "depth", "shelf"), sep = "_") |> 
             filter(VARIABLE == group_selector,
                    shelf == shelf_selector,
                    model_type == response_selector,
+                   sub_model == sub_model_selector,
                    selected) |>
             pull(family_type)
         }
@@ -317,7 +341,10 @@ observeEvent(input$nrm_panel, {     ## when change panels
           shelf_selector,
           "_",
           response_selector,
-          "_ _")
+          ## "_ _")
+          "_",
+          sub_model_selector,
+          "_")
 
         ## Raw data
         nm5 <- paste0(file_str_data_path, file_str_data_body, "raw_data", ".rds")
@@ -366,7 +393,7 @@ observeEvent(input$nrm_panel, {     ## when change panels
                                    family_type,
                                    " ",
                                    " ",
-                                   shelf_selector, response_selector, " ",
+                                   shelf_selector, response_selector, sub_model_selector,
                                    "raw_data.rds", sep = "_"))) |>
           mutate(raw = map(.x = nm,
                            .f = ~ {
@@ -395,6 +422,7 @@ observeEvent(input$nrm_panel, {     ## when change panels
       ## Annual summaries
       if (nrm_selector != "All NRMs") {
         nm <- paste0(file_str_data_path, file_str_data_body, "year_sum", ".rds")
+        ## alert(nm)
         if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
           if(file.exists(nm)) {
             data <- readRDS(file = nm)
@@ -438,7 +466,8 @@ observeEvent(input$nrm_panel, {     ## when change panels
                  ## reef_zone == zone_selector,
                  ## depth == depth_selector,
                  shelf == shelf_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -449,11 +478,11 @@ observeEvent(input$nrm_panel, {     ## when change panels
                                    " ", ## reef_zone,
                                    " ", ## depth,
                                    shelf,
-                                   model_type, " ",
+                                   model_type, sub_model,
                                    "year_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
         output[[paste0(tab_id, "_annual_tbl")]] <- NULL
         nm_2 <- find_common_pattern(add_data$nm) 
@@ -564,7 +593,8 @@ observeEvent(input$nrm_panel, {     ## when change panels
                  ## reef_zone == zone_selector,
                  ## depth == depth_selector,
                  shelf == shelf_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -574,11 +604,11 @@ observeEvent(input$nrm_panel, {     ## when change panels
                                    family_type,
                                    " ", #reef_zone,
                                    " ", #depth,
-                                   shelf, model_type, " ",
+                                   shelf, model_type, sub_model,
                                    "all_yearcomp_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
         alert(add_data_3$nm)
 
@@ -656,7 +686,8 @@ observeEvent(input$nrm_panel, {     ## when change panels
                  ## reef_zone == zone_selector,
                  ## depth == depth_selector,
                  shelf == shelf_selector,
-                 model_type == response_selector) |> 
+                 model_type == response_selector,
+                 sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    "nrm", #data_scale,
@@ -666,11 +697,11 @@ observeEvent(input$nrm_panel, {     ## when change panels
                                    " ", #reef_zone,
                                    " ", #depth,
                                    shelf,
-                                   model_type, " ",
+                                   model_type, sub_model,
                                    "yearcomp_sum.rds", sep = "_"))) |> 
           dplyr::select(data_type, data_scale, domain_name,
                         group, family_type, reef_zone, depth,
-                        shelf, model_type, nm
+                        shelf, model_type, sub_model, nm
                         )
         add_data_3_1a <- add_data_3_1 |> 
           mutate(dat =  map(.x = nm, .f = ~ {
@@ -741,7 +772,7 @@ observeEvent(input$nrm_panel, {     ## when change panels
                                    family_type,
                                    " ", #zone_selector,
                                    " ", #depth_selector,
-                                   shelf_selector, response_selector, " ",
+                                   shelf_selector, response_selector, sub_model_selector,
                                    "raw_sums.rds", sep = "_"))) |>
           mutate(raw = map(.x = nm,
                            .f = ~ {
