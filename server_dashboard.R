@@ -878,7 +878,9 @@ observeEvent(input$run_fit_reefs, {
     timer_observer <- observe({
       invalidateLater(1000)
       if(isolate(process$is_alive()) == FALSE) {
-
+        ## alert(process$get_exit_status())
+        ## alert(process$get_output_file())
+        ## alert(process$get_error_file())
         update_db_model_hash(method = data_type, scale = "reef", domain = reefs)
         ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
         tbl_choice <- input$sql_tbl_choice
