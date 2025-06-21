@@ -9,6 +9,7 @@ server <- function(input, output, session) {
   source("server_reefs.R", local = TRUE)
   source("server_nrm.R", local = TRUE)
   source("server_sector.R", local = TRUE)
+  source("server_crontab.R", local = TRUE)
   
 }
 

@@ -16,13 +16,14 @@ sidebar <- dashboardSidebar(
     menuItem("Reefs", tabName = "reefs", icon = icon("location-dot")),
     menuItem("Sectors", tabName = "sectors", icon = icon("diamond")),
     menuItem("NRM regions", tabName = "nrm", icon = icon("shapes")),
-    menuItem("Zones", tabName = "zones", icon = icon("star"))
+    menuItem("Zones", tabName = "zones", icon = icon("star")),
     ## menuItem("Landing", tabName = "landing", icon = icon("home")),
     ## menuItem("Data", tabName = "data", icon = icon("file-excel")),
     ## menuItem("Exploratory Data Analysis", tabName = "eda", icon = icon("chart-column")),
     ## menuItem("Analysis", tabName = "analysis", icon = icon("calculator")),
     ## menuItem("Manual", tabName = "manual", icon=icon("mortar-board")),
-    ## hr(),
+    hr(),
+    menuItem("Crontab", tabName = "crontab", icon = icon("clock"))
     ## actionButton("runLoadCode", "Run Stage 2", icon = icon("play")),
     ## ## actionBttn("runLoadCode", "Run Stage 2", style = "jelly", color =  "primary", icon = icon("play")),
     ## actionButton("runProcessCode", "Run Stage 3", icon = icon("play"), class = "btn-disabled"),

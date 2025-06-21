@@ -2,6 +2,7 @@
 library(shiny)
 library(shinydashboard)
 library(shinyjs)
+library(DT)
 library(tidyverse)
 library(fansi)
 ## library(promises)
@@ -14,7 +15,7 @@ library(digest)
 source("/home/mlogan/dev/R/backend_functions.R")
               
 ## future::plan(multisession)
-source("dashboard_config.R", local = FALSE)
+source("dashboard_config.R", local = FALSE)    ##PUT THIS BACK AFTER TESTING
 source("ui_header.R")
 source("ui_sidebar.R")
 source("ui_body.R")
@@ -28,3 +29,5 @@ shinyUI(
   )
 )
 
+
+                                                        

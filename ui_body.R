@@ -4,6 +4,7 @@ source("ui_body_reefs.R")
 source("ui_body_sectors.R")
 source("ui_body_nrm.R")
 source("ui_body_zones.R")
+source("ui_body_crontab.R")
 source("styles.R")
 
 
@@ -16,6 +17,7 @@ body <- dashboardBody(
     reefs_tab,
     sectors_tab,
     nrm_tab,
-    zones_tab
+    zones_tab,
+    crontab_tab
   )
 )
