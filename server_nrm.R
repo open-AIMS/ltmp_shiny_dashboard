@@ -366,12 +366,15 @@ observeEvent(input$nrm_panel, {     ## when change panels
             }
           )
           if(file.exists(nm5)) {
+            ## alert(colnames(data5))
+            ## alert(family_type)
             raw_bits <- data5 |>
               dplyr::select(Sector, Shelf, NRM_region) |>
               mutate(AIMS_REEF_NAME = nrm_selector,
                      GROUP = group_selector,
                      SHELF = shelf_selector,
-                     FAMILY = nrm_tab_lookup[[tab_name]]$family) |>
+                     ## FAMILY = nrm_tab_lookup[[tab_name]]$family) |>
+                     FAMILY = family_type) |>
               distinct() 
           }
         }

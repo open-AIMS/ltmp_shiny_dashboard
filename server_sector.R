@@ -358,6 +358,8 @@ observeEvent(input$sector_panel, {     ## when change panels
             }
           )
           if(file.exists(nm5)) {
+            ## alert(colnames(data5))
+            ## alert(family_type)
             raw_bits <- data5 |>
               mutate(Sector = sector_selector) |> 
               dplyr::select(Sector) |>

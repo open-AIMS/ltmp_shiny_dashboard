@@ -23,7 +23,7 @@ reefs_tab_lookup <- list(
   "Juveniles" =  list(
     data_type = "juveniles",
     outputId = "reefs_juveniles",
-    family = "binomial",
+    family = "poisson",
     ## shelfs = c("Inshore", "Offshore"),
     ## groups = c("HARD CORAL")
     response = ""
@@ -178,7 +178,8 @@ observeEvent(input$reefs_panel, {     ## when change panels
             icon = icon("table"),
             reactableOutput(outputId = paste0(tab_id, "_annual_tbl")),
             downloadButton(paste0(tab_id, "_annual_download_data"), "Download as csv"),
-            downloadButton(paste0(tab_id, "_annual_download_data_posteriors"), "Download posteriors as csv")
+            downloadButton(paste0(tab_id, "_annual_download_data_posteriors"), "Download posteriors as csv"),
+            "When downloading 'All Reefs' posteriors, please be patient.  It may take a minute or so to bind all the posteriors from each reef together, before it can begin the download."
             ## actionButton("generate_zip", "Generate ZIP"),
             ##  uiOutput("download_ui")  # Placeholder for the download link
 
@@ -195,14 +196,16 @@ observeEvent(input$reefs_panel, {     ## when change panels
             icon = icon("database"),
             reactableOutput(outputId = paste0(tab_id, "_all_annual_comp_tbl")),
             downloadButton(paste0(tab_id, "_all_annual_comp_download_data"), "Download as csv"),
-            downloadButton(paste0(tab_id, "_all_annual_comp_download_data_posteriors"), "Download posteriors as csv")
+            downloadButton(paste0(tab_id, "_all_annual_comp_download_data_posteriors"), "Download posteriors as csv"),
+            "When downloading 'All Reefs' posteriors, please be patient.  It may take a minute or so to bind all the posteriors from each reef together, before it can begin the download."
             ),
           tabPanel(
             title = "Comparison to most recent",
             icon = icon("database"),
             reactableOutput(outputId = paste0(tab_id, "_annual_comp_tbl")),
             downloadButton(paste0(tab_id, "_annual_comp_download_data"), "Download as csv"),
-            downloadButton(paste0(tab_id, "_annual_comp_download_data_posteriors"), "Download posteriors as csv")
+            downloadButton(paste0(tab_id, "_annual_comp_download_data_posteriors"), "Download posteriors as csv"),
+            "When downloading 'All Reefs' posteriors, please be patient.  It may take a minute or so to bind all the posteriors from each reef together, before it can begin the download."
             ),
           tabPanel(
             title = "Raw aggreations",
@@ -395,6 +398,7 @@ observeEvent(input$reefs_panel, {     ## when change panels
                    selected) |>
             pull(family_type)
           if (length(family_type>1)) family_type <- family_type[1]  ## this is a temporary measure while transitioning to all fish having sub_model
+          ## alert(family_type)
           ## temp <- model_tbl |>
           ##   separate(splits, into = c("reef_zone", "depth", "shelf"), sep = "_") |> 
           ##   filter(VARIABLE == group_selector,
@@ -421,6 +425,8 @@ observeEvent(input$reefs_panel, {     ## when change panels
           ## alert(temp)
           ## ## alert(head(temp))
           ## ## alert(head(model_tbl |> dplyr::select(reef_zone, sub_model)))
+        } else {
+         family_type <- ""
         }
         
         file_str_data_path <- "www/data/modelled/"
@@ -490,6 +496,9 @@ observeEvent(input$reefs_panel, {     ## when change panels
                      GROUP = group_selector,
                      DEPTH = depth_selector,
                      FAMILY = reefs_tab_lookup[[tab_name]]$family) |>
+                     ## FAMILY = ifelse(exists(family_type),
+                     ##             family_type,
+                     ##             reefs_tab_lookup[[tab_name]]$family )) |>
               distinct() 
           }
         }
@@ -541,6 +550,20 @@ observeEvent(input$reefs_panel, {     ## when change panels
             data <- data |>
               mutate(AIMS_REEF_NAME = reefs_selector) |> 
               left_join(raw_bits, by = "AIMS_REEF_NAME")
+            ## ## get the model metadata from the models database table
+            ## add_data <- get_candidates(tab_name, data_type, scale = "reef") |> 
+            ##   filter(selected_flag == 1) |>
+            ##   filter(
+            ##     domain_name == reefs_selector,
+            ##     group == group_selector,
+            ##     reef_zone == zone_selector,
+            ##     depth == depth_selector,
+            ##     shelf == shelf_selector,
+            ##     model_type == response_selector,
+            ##     sub_model == sub_model_selector)
+            ## data <- data |>
+            ##   mutate(FAMILY = add_data |>
+            ##            pull(family_type))
           }
 
           output[[paste0(tab_id, "_annual_tbl")]] <- reactable::renderReactable({
@@ -605,9 +628,12 @@ observeEvent(input$reefs_panel, {     ## when change panels
           },
           content = function(file) {
             add_data_2 <- add_data |> 
-              mutate(dat =  map(.x = nm, .f = ~readRDS(.x))) |>
+              mutate(dat =  map(.x = nm,
+                                .f = ~ {
+                                  if (!file.exists(.x)) return(NULL)
+                                  readRDS(.x)
+                                })) |>
               unnest(dat)  
-
             write_csv(add_data_2, file)
           }
         )
@@ -619,7 +645,11 @@ observeEvent(input$reefs_panel, {     ## when change panels
           content = function(file) {
             add_data_3 <- add_data |> 
               mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
-                                .f = ~readRDS(.x))) |>
+                                .f = ~ {
+                                  if (!file.exists(.x)) return(NULL)
+                                  readRDS(.x)
+                                  }
+                                  )) |>
               unnest(dat)  |>
               dplyr::select(-nm)
             write_csv(add_data_3, file)
@@ -785,12 +815,12 @@ observeEvent(input$reefs_panel, {     ## when change panels
                         gsub("__.*", "_", basename(nm_3a))))
           },
           content = function(file) {
-        add_data_3a <- add_data_3 |> 
-          mutate(dat =  map(.x = nm, .f = ~ {
-            if (!file.exists(.x)) return(NULL)
-            readRDS(.x)
-          })) |>
-          unnest(dat)  
+            add_data_3a <- add_data_3 |> 
+              mutate(dat =  map(.x = nm, .f = ~ {
+                if (!file.exists(.x)) return(NULL)
+                readRDS(.x)
+              })) |>
+              unnest(dat)  
             write_csv(add_data_3a |> dplyr::select(-nm), file)
           }
         )
@@ -802,7 +832,11 @@ observeEvent(input$reefs_panel, {     ## when change panels
           content = function(file) {
             add_data_3b <- add_data_3 |> 
               mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
-                                .f = ~readRDS(.x))) |>
+                                .f = ~ {
+                                  if (!file.exists(.x)) return(NULL)
+                                  readRDS(.x)
+                                  }
+                                  )) |>
               unnest(dat)  |>
               dplyr::select(-nm)
             write_csv(add_data_3b, file)
@@ -909,7 +943,11 @@ observeEvent(input$reefs_panel, {     ## when change panels
           content = function(file) {
             add_data_3_1b <- add_data_3_1a |> 
               mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
-                                .f = ~readRDS(.x))) |>
+                                .f = ~ {
+                                  if (!file.exists(.x)) return(NULL)
+                                  readRDS(.x)
+                                  }
+                                  )) |>
               unnest(dat)  |>
               dplyr::select(-nm)
             write_csv(add_data_3_1b, file)

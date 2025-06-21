@@ -334,6 +334,7 @@ make_dashboard_table <- function(data, ids) {
       )
       )
     })
+
   ## }
 }
 
@@ -345,6 +346,9 @@ observeEvent(input$dashboard_panel, {     ## when change panels
   tab_name <- input$dashboard_panel
   lookup <- dashboard_tab_lookup[[tab_name]]
   tab_id <- lookup$outputId
+  if(lookup$sql == "juv.sql")
+    system('( for f in /home/shiny/dashboard/data/juv_*.sql; do cat "$f"; printf "\n\n"; done ) > /home/shiny/dashboard/data/juv.sql')
+
   output[[paste0(tab_id, "_panel")]] <- renderUI({
     fluidRow( 
       column(width = 12,
@@ -417,7 +421,9 @@ observeEvent(input$dashboard_panel, {     ## when change panels
                                 title =
                                   span(
                                     icon("info", style = "margin-right: 10px;"),
-                                    paste0("SQL (~/dashboard/data/", lookup$sql, ")"),
+                                    ifelse(lookup$sql != "juv.sql",
+                                           paste0("SQL (~/dashboard/data/", lookup$sql, ")"),
+                                           paste0("SQL ", paste0("(~/dashboard/data/", paste0(gsub(".sql", "_", lookup$sql), c(1,2), ".sql"), ")", collapse = " and "))),
                                     actionButton("run_sql", "Run",
                                                  style = "margin-left:auto; padding-top:0px; padding-bottom:0px; position:absolute;right:10px;",
                                                  icon =  icon("play"))
@@ -757,16 +763,17 @@ observeEvent(c(input$refresh_summary_tbl), {
   ##                      csv_file, tab_id, sub_tab_id) 
   ids <- get_dashboard_tab_ids()  
   data_meta <- get_dashboard_data_type(ids)  
-
   tbl_choice <- input$sql_tbl_choice
   if (is.null(tbl_choice)) tbl_choice <- "summary"
   if (tbl_choice == "data") {
     tbl <- make_dashboard_data(method = data_meta$data_type,
                                scale = data_meta$data_scale)
   } else {
+    ## alert("called from refresh button")
     tbl <- make_dashboard_summary(method = data_meta$data_type,
                                   scale = data_meta$data_scale)
   }
+  ## alert(colnames(tbl))
   if (!is.null(tbl)) {
     make_dashboard_table(tbl, ids) 
   }
@@ -1078,6 +1085,9 @@ observeEvent(input$run_fit_sector, {
     ## sectors <- dashboard_tab_lookup[[ids$tab_name]][[ids$sub_tab_name]]$choices
   }
   process_ui_start(data_meta, id = "run_fit_sector")
+  ## alert("Fitting sectors")
+  ## alert(data_type)
+
   process <- processx::process$new("Rscript", 
                                    args = c("../dev/R/batch.R",
                                             paste0("--purpose=fit"),
@@ -1088,23 +1098,9 @@ observeEvent(input$run_fit_sector, {
                                    stderr =  sub("dashboard", "dashboard_error",
                                                  config_$dashboard_log)
                                    )
-  ## process <- processx::process$new("Rscript", 
-  ##                                  args = c("../dev/R/run_models.R",
-  ##                                           paste0("--method=", data_type),
-  ##                                           paste0("--scale=sectors"),
-  ##                                           paste0("--domain=", sectors),
-  ##                                           paste0("--log=", config_$dashboard_log)),
-  ##                                  stdout = config_$dashboard_log
-  ##                                  ## stderr =  config_$dashboard_log
-  ##                                  )
     timer_observer <- observe({
       invalidateLater(1000)
       if(isolate(process$is_alive()) == FALSE) {
-        ## config_$models <- get_config_models()
-        ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
-        ## copy_to(con, config_$models, name = "models", temporary = FALSE, overwrite = TRUE)
-        ## dbDisconnect(con)
-        ## tbl <- get_db_table_data(input$sql_tbl_choice, data_meta)
         update_db_model_hash(method = data_type, scale = "sector", domain = sectors)
         tbl_choice <- input$sql_tbl_choice
         if (is.null(tbl_choice)) tbl_choice <- "summary"
@@ -1269,6 +1265,8 @@ run_sql <- function() {
   db <- readRDS(config_$db_file)
   sql_file <- ids$lookup$sql
   csv_file <- db[[data_meta$data_type]]$data_file
+  cat(paste0("\nThe data type is:", data_type, "\n"),
+      file = config_$dashboard_log, append = TRUE)
   process <- processx::process$new("Rscript", 
                                    args = c("../dev/R/batch.R",
                                             paste0("--purpose=sql"),
@@ -1936,10 +1934,20 @@ get_candidates_to_select_from <- function(data_meta, field) {
   ## if (data_meta$data_scale == "reef" )
   ##   db_tbl <- paste0(data_meta$data_type, "_sum")
   ## else
-  db_tbl <- paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum")
   con <- dbConnect(RSQLite::SQLite(), config_$db_path)
   tbls <- dbListTables(con) 
+  db_tbl <- paste0(data_meta$data_type, "_", data_meta$data_scale, "_sum")
   if (db_tbl %in% tbls) {
+    row_count <- dbGetQuery(con, paste0("SELECT COUNT(*) AS n from '", db_tbl, "'"))$n
+    if (row_count < 1) {  ## check that there are rows in this table
+      db_tbl <- paste0(data_meta$data_type, "_sum")       ## try the higher level table
+      field <- data_meta$data_scale
+      row_count <- dbGetQuery(con, paste0("SELECT COUNT(*) AS n from '", db_tbl, "'"))$n
+      if (row_count < 1) {
+        dbDisconnect(con)
+        return(NULL)
+      }
+    }
     candidates <- tbl(con, db_tbl) |>
       select(!!sym(field)) |>
       distinct() |> 
@@ -1950,8 +1958,5 @@ get_candidates_to_select_from <- function(data_meta, field) {
   dbDisconnect(con)
   return(candidates)
 }
-
-
-  
 
 
