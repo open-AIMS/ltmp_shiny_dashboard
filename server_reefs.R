@@ -503,14 +503,22 @@ observeEvent(input$reefs_panel, {     ## when change panels
           }
         }
       } else if (all_reefs) {
+        ## alert(colnames(get_candidates(tab_name, data_type, scale = "reef") |> 
+        ##   filter(selected_flag == 1)))
+        ## write.csv(get_candidates(tab_name, data_type, scale = "reef") |> 
+        ##   filter(selected_flag == 1), file = "~/data/AA.csv")
         add_data5 <- get_candidates(tab_name, data_type, scale = "reef") |> 
           filter(selected_flag == 1) |>
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type, data_scale, domain_name,
-                                   group_selector,
-                                   family_type, zone_selector, depth_selector,
+                                   ## group_selector,
+                                   group,
+                                   family_type,
+                                   reef_zone, depth,
+                                   ## zone_selector, depth_selector,
                                    ## shelf_selector, response_selector, " ",
-                                   shelf_selector, response_selector, sub_model_selector,
+                                   ## shelf_selector, response_selector, sub_model_selector,
+                                   shelf, response_selector, sub_model,
                                    "raw_data.rds", sep = "_"))) |>
           mutate(raw = map(.x = nm,
                            .f = ~ {
@@ -520,8 +528,15 @@ observeEvent(input$reefs_panel, {     ## when change panels
                            })) |>
           dplyr::select(nm, raw) |>
           unnest("raw")
+
+        ## write.csv(add_data5, file = "~/data/AB.csv")
+        ## alert(colnames(add_data5))
+        ## alert(tail(add_data5))
+        ## alert(tail(add_data5$nm))
         output[[paste0(tab_id, "_raw_data_tbl")]] <- NULL
         nm_5 <- find_common_pattern(add_data5$nm) 
+        ## alert(nm_5)
+        ## alert(length(nm_5))
           ## output[[paste0(tab_id, "_raw_data_tbl")]] <- reactable::renderReactable({
           ##   ## reactable(add_data5)
           ##   make_table(add_data5, type = "other")
@@ -597,12 +612,12 @@ observeEvent(input$reefs_panel, {     ## when change panels
       } else if (all_reefs) {
         add_data <- get_candidates(tab_name, data_type, scale = "reef") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 reef_zone == zone_selector,
-                 depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        reef_zone == zone_selector,
+          ##        depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type, data_scale, domain_name,
                                    group,
@@ -700,12 +715,12 @@ observeEvent(input$reefs_panel, {     ## when change panels
         output[[paste0(tab_id, "_annual_group_tbl")]] <- NULL 
         add_data2 <- get_candidates(tab_name, data_type, scale = "reef") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 reef_zone == zone_selector,
-                 depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        reef_zone == zone_selector,
+          ##        depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type, data_scale, domain_name,
                                    group,
@@ -783,12 +798,12 @@ observeEvent(input$reefs_panel, {     ## when change panels
       } else if (all_reefs) {
         add_data_3 <- get_candidates(tab_name, data_type, scale = "reef") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 reef_zone == zone_selector,
-                 depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        reef_zone == zone_selector,
+          ##        depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type, data_scale, domain_name,
                                    group,
@@ -900,12 +915,12 @@ observeEvent(input$reefs_panel, {     ## when change panels
       } else if (all_reefs) {
         add_data_3_1 <- get_candidates(tab_name, data_type, scale = "reef") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 reef_zone == zone_selector,
-                 depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        reef_zone == zone_selector,
+          ##        depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type, data_scale, domain_name,
                                    group,
