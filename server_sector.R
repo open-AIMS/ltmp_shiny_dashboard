@@ -437,10 +437,10 @@ observeEvent(input$sector_panel, {     ## when change panels
       } else if (all_sectors) {
         add_data <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 ## reef_zone == zone_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        ## reef_zone == zone_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -525,9 +525,9 @@ observeEvent(input$sector_panel, {     ## when change panels
         output[[paste0(tab_id, "_annual_group_tbl")]] <- NULL 
         add_data2 <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 model_type == response_selector,
-                 sub_model ==  sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        model_type == response_selector,
+          ##        sub_model ==  sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -610,9 +610,9 @@ observeEvent(input$sector_panel, {     ## when change panels
       } else if (all_sectors) {
         add_data_3 <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 model_type == response_selector,
-                 sub_model ==  sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        model_type == response_selector,
+          ##        sub_model ==  sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -705,9 +705,9 @@ observeEvent(input$sector_panel, {     ## when change panels
       } else if (all_sectors) {
         add_data_3_1 <- get_candidates(tab_name, data_type, scale = "sector") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,

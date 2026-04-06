@@ -1,3 +1,7 @@
+dashboard_config_log <- "~/data/dashboard_config.log"
+message("Start of config")
+cat("Start of config\n", file = dashboard_config_log)
+
 config_ <- list(
   data_path = "../data/",
   model_path = "../dev/data/modelled/",
@@ -40,6 +44,7 @@ config_$meta <- tibble(path = fls) |>
 ## config_$data_path <- "../data/"
 ## config_$dashboard_log <- "../data/dashboard.log"
 ## unlink(config_$dashboard_log)
+unlink("~/data/dashboard_run.log")
 ## unlink(gsub(".log", ".old", config_$dashboard_log))
 ## config_$db_file <- paste0(config_$data_path, "db.rda")
 ## config_$locked <- FALSE
@@ -48,7 +53,7 @@ config_$meta <- tibble(path = fls) |>
 
   
 
-
+message("Start of config db_file")
 if(!file.exists(config_$db_file)) {
   db <- list("photo-transect" = list(
                data_file = paste0(config_$data_path, "photo-transect.csv"),
@@ -95,7 +100,7 @@ con <- dbConnect(RSQLite::SQLite(), config_$db_path)
 ## ##     value REAL
 ## ## );"
 ## ## dbExecute(con, sql_create_table)
-## message("here")
+message("here")
 ## message(DBI::dbIsValid(con))
 ## ## data <- tbl(con, "models") |>
 ## ## collect() ##|>
@@ -132,16 +137,70 @@ get_db_model_data<- function(method = NULL, scale = NULL, domain = NULL) {
     collect() ##|> 
     ## dplyr::select(data_type, data_scale, domain_name, matches(".*_hash"))
     ## dplyr::select(data_type, data_scale, domain_name, contains("_hash"))
+  ## alert("Fishing")
   if (!is.null(method)) {
     data <- data |> 
     filter(data_type == method,
            data_scale == scale,
            domain_name %in% domain)
   }
+  if (!is.null(scale)) {
+    data <- data |> 
+    filter(data_scale == scale)
+  }
+  if (!is.null(domain)) {
+    data <- data |> 
+    filter(domain_name %in% domain)
+  }
   dbDisconnect(con)
   return(data)
 }
 
+get_db_meta_data <- function() {
+  con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+  data <- 1
+  data <- tbl(con, "meta") |>
+    collect() 
+  dbDisconnect(con)
+  return(data)
+}
+
+
+get_config_models <- function() {
+  ## Retrieve any meta data from the database
+  ## The meta data is just the names of all reefs etc downloaded and processed
+  con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+  tbls <- dbListTables(con) 
+  dbDisconnect(con)
+  ## if ("meta" %in% tbls & 1 == 1) {
+  ##   meta_db <- get_db_meta_data()
+  if ("models" %in% tbls) {
+    models <- get_db_model_data()
+  } else {  # Create a blank dataframe
+    models <- tribble(
+      ~path, ~data_type, ~data_scale, ~domain_name, ~group, ~family_type, ~reef_zone, ~depth, ~shelf, ~model_date, ~model_path, ~reef_model_data_hash, ~sector_model_data_hash, ~nrm_model_data_hash
+      )
+  }
+  ## ## Retrieve any model data from the database
+  ## con <- dbConnect(RSQLite::SQLite(), config_$db_path)
+  ## tbls <- dbListTables(con) 
+  ## dbDisconnect(con)
+  ## if ("models" %in% tbls & 1 == 1) {
+  ##   models_db <- get_db_model_data()
+  ##   models <- models_db |>
+  ##     full_join(meta_db |>
+  ##               dplyr::select(-matches(".*\\_hash$|^path$|^model\\_.*")),
+  ##               by = c("data_type" = "data_type",
+  ##                      "data_scale" = "data_scale",
+  ##                      "domain_name" = "domain_name",
+  ##                      "group" = "group",
+  ##                      "family_type" = "family_type",
+  ##                      "reef_zone" = "reef_zone",
+  ##                      "depth" = "depth",
+  ##                      "shelf")) 
+  ## }
+  return(models)
+}
 ## trawl through model path and extract model metadata
 ## then join onto this, the model info in the database (if it exists)
 ## 1. trawl through model path and extract model metadata
@@ -150,7 +209,7 @@ get_db_model_data<- function(method = NULL, scale = NULL, domain = NULL) {
 ##    2.1. read from the database
 ##    2.2. join in metadata
 ## 3. replace model database
-get_config_models <- function() {
+get_config_models_old <- function() {
   ## sink(file = "/home/mlogan/data/AAAA.txt")
   ## Start by gleaning the info by scanning through the models folders
   fls <- list.files(config_$model_path,
@@ -229,8 +288,8 @@ get_config_models <- function() {
 }
 
 ## Potentially put this back
-config_$models <- get_config_models() 
-
+## config_$models <- get_config_models() 
+## cat("config_$models created\n", file = dashboard_config_log, append = TRUE)
 
 assign("config_", config_, envir = .GlobalEnv)
 
@@ -259,3 +318,6 @@ toggle_buttons <- function(on = NULL, off = NULL, success = NULL) {
 ##   dbDisconnect(con)
 ## }
 
+
+cat("End of the dashboard config\n", file = dashboard_config_log, append = TRUE)
+message("End of dashboard config")

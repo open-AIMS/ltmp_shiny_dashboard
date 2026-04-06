@@ -381,10 +381,10 @@ observeEvent(input$nrm_panel, {     ## when change panels
       } else if (all_nrms) {
         add_data5 <- get_candidates(tab_name, data_type, scale = "nrm") |>
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                  shelf == shelf_selector,
-                 model_type == response_selector
-                 ) |> 
+          ## filter(group == group_selector,
+          ##         shelf == shelf_selector,
+          ##        model_type == response_selector
+          ##        ) |> 
         ## write_csv(add_data5, file = "~/data/A.csv")
         ## add_data5 <- add_data5 |> 
           mutate(nm = paste0("www/data/modelled/",
@@ -465,12 +465,12 @@ observeEvent(input$nrm_panel, {     ## when change panels
       } else if (all_nrms) {
         add_data <- get_candidates(tab_name, data_type, scale = "nrm") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 ## reef_zone == zone_selector,
-                 ## depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        ## reef_zone == zone_selector,
+          ##        ## depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -592,12 +592,12 @@ observeEvent(input$nrm_panel, {     ## when change panels
       } else if (all_nrms) {
         add_data_3 <- get_candidates(tab_name, data_type, scale = "nrm") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 ## reef_zone == zone_selector,
-                 ## depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        ## reef_zone == zone_selector,
+          ##        ## depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    ## data_scale,
@@ -685,12 +685,12 @@ observeEvent(input$nrm_panel, {     ## when change panels
       } else if (all_nrms) {
         add_data_3_1 <- get_candidates(tab_name, data_type, scale = "nrm") |> 
           filter(selected_flag == 1) |>
-          filter(group == group_selector,
-                 ## reef_zone == zone_selector,
-                 ## depth == depth_selector,
-                 shelf == shelf_selector,
-                 model_type == response_selector,
-                 sub_model == sub_model_selector) |> 
+          ## filter(group == group_selector,
+          ##        ## reef_zone == zone_selector,
+          ##        ## depth == depth_selector,
+          ##        shelf == shelf_selector,
+          ##        model_type == response_selector,
+          ##        sub_model == sub_model_selector) |> 
           mutate(nm = paste0("www/data/modelled/",
                              paste(data_type,
                                    "nrm", #data_scale,

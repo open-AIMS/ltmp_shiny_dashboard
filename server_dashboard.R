@@ -2,7 +2,9 @@
 ##data/pt_sum.csv (created by make_dashboard_table, get_data_summary)
 ## config_$models (the models that have been fit)
 
-   
+## dashboard_tab_lookup is a list that defines some of the labels
+## and names associated with the different elements and is used
+## during the construction of ui elements (such as tabs)
 dashboard_tab_lookup <- list(
   "Photo-transects" =  list(
     data_type = "photo-transect",
@@ -120,8 +122,13 @@ dashboard_tab_lookup <- list(
     )
   )
 )
-  
+
+## alert("At the start of server_dashboard.R")
+
 ## Functions =========================================================
+
+## The following function returns the names and ids of the current
+## tab element
 get_dashboard_tab_ids <- function() {
   tab_name <- input$dashboard_panel
   lookup <- dashboard_tab_lookup[[tab_name]]
@@ -141,6 +148,10 @@ get_dashboard_tab_ids <- function() {
        sub_tab_id = sub_tab_id
        )
 }
+
+## The following function returns the data type (Photo-transect, Manta
+## tow, Juveniles or Fish) and scale (Reefs, Sectors, NRM regions)
+## associated with the current id
 get_dashboard_data_type <- function(ids) {
   data_type <- ids$lookup$data_type
   data_scale <- ids$sub_tab_id
@@ -148,6 +159,7 @@ get_dashboard_data_type <- function(ids) {
        data_scale = data_scale)
 }
 
+## The following function is obsolete
 get_db_table_data <- function(tbl_choice, data_meta) {
   ## alert(data_meta)
   file_exists <- FALSE 
@@ -253,10 +265,14 @@ get_db_table_data <- function(tbl_choice, data_meta) {
   return(data)
 }
 
+## The following function formats the data and creates a html table
 make_dashboard_table <- function(data, ids) {
   data <- data |> 
       mutate(across(ends_with("model_data_hash"),
                     list(flag = ~ FALSE)))
+  ## for reef level, put the reefs in alphabetical order
+  if (nrow(data)>1 & !any(colnames(data) %in% c("sector", "nrm")))
+    data <- data |> arrange(reef)
   ## if ("extract_data_hash" %in% names(data)) {
   if (any(str_detect(names(data), "extract_data_hash"))) {
     data <- data |>
@@ -264,7 +280,7 @@ make_dashboard_table <- function(data, ids) {
                     ## list(flag = function(x) x == extract_data_hash)))
                     list(flag = function(x) x == sub("model", "extract", x))))
   }
-   write.csv(data, file = "../data/tempA.csv")
+   ## write.csv(data, file = "../data/tempA.csv")
 ##   if (nrow(data) > 10)
 ## alert(head(data |> dplyr::select(flag, ends_with("hash"))))
 ## alert(head(data |> dplyr::select(flag)))
@@ -675,7 +691,11 @@ observeEvent(input$dashboard_panel, {     ## when change panels
 })
 
 ## Change in routines tabs (Extract data, Prepare Sectors, Prepare NRMs, Prepare Reefs)
+## Populate data/summary table and update the fit models selector input
+## to include all possible candidates (from *_sum database table)
 observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
+  cat("\nStart of change dashboard sub panel\n",
+      file = "~/data/dashboard_run.log", append = TRUE)
   ids <- get_dashboard_tab_ids()  
   data_meta <- get_dashboard_data_type(ids)  
   ## build_summary_data(data_meta)
@@ -695,6 +715,8 @@ observeEvent(c(input$dashboard_sql_panel), {  ## when change sub panels
     tbl <- make_dashboard_summary(method = data_meta$data_type,
                                   scale = data_meta$data_scale)
   }
+  cat(paste0("Method:", data_meta$data_type, " scale:", data_meta$data_scale, "\n"),
+      file = "~/data/dashboard_run.log", append = TRUE)
   if (!is.null(tbl)) {
     make_dashboard_table(tbl, ids) 
   }
@@ -869,6 +891,7 @@ observeEvent(input$run_fit_reefs, {
     reefs <- get_candidates_to_select_from(data_meta, "domain_name")
   }
   process_ui_start(data_meta, id = "run_fit_reef")
+  ## alert("here") 
   process <- processx::process$new("Rscript", 
                                    ## args = c("../dev/R/run_models.R",
                                    args = c("../dev/R/batch.R",
@@ -1362,6 +1385,7 @@ run_prepare_reefs <- function() {
                                             paste0("--log=../", config_$dashboard_log)),
                                    stderr =  sub("dashboard", "dashboard_error",
                                                  config_$dashboard_log)
+                                   ## stdout = config_$dashboard_log
                                    )
   ## process <- processx::process$new("Rscript", 
   ##                                  args = c("../dev/R/process_db_extract.R",
@@ -1406,8 +1430,21 @@ run_prepare_reefs <- function() {
       ##   ## compute(db_sum_tbl, temporary = FALSE, overwrite = TRUE, copy = TRUE)
       ## dbDisconnect(con)
 
+      ## Update the candidates dropdown
+      ## alert("getting candidates")
+      candidates <- get_candidates_to_select_from(data_meta, "domain_name")
+      ## alert(data_meta$data_type)
+      ## alert(data_meta$data_scale)
+      ## alert(paste0(data_meta$data_type, "_", data_meta$data_scale,  "_model_choice"))
+      updateSelectInput(
+        inputId = paste0(data_meta$data_type, "_", data_meta$data_scale,  "_model_choice"),
+        choices = c("all", sort(unique(candidates)))
+      )
+
       file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
                   file2 = config_$dashboard_log)
+      ## file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+      ##             file2 = sub("dashboard", "dashboard_error", config_$dashboard_log))
       process_ui_end(data_meta, "run_prepare_reefs")
       timer_observer$destroy()
     }
@@ -1443,9 +1480,9 @@ run_prepare_nrm <- function() {
     ##                                  stdout = config_$dashboard_log
     ##                                  ## stderr =  config_$dashboard_log
     ##                                  )
-    timer_observer <- observe({
-      invalidateLater(1000)
-      if(isolate(process$is_alive()) == FALSE) {
+  timer_observer <- observe({
+    invalidateLater(1000)
+    if(isolate(process$is_alive()) == FALSE) {
       cat("\nGenerating summary table from export\n======================================\n",
           file = config_$dashboard_log, append = TRUE)
 
@@ -1462,19 +1499,20 @@ run_prepare_nrm <- function() {
       if (!is.null(tbl)) {
         make_dashboard_table(tbl, ids) 
       }
-        ## build_summary_data(data_meta)
-        ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-        ## if (!is.null(tbl)) {
-        ##   make_dashboard_table(tbl, ids) 
-        ## }
-        file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
-                    file2 = config_$dashboard_log)
-        process_ui_end(data_meta, "run_prepare_nrm")
-        timer_observer$destroy()
-      }
-    }) 
-    ## config_$models <- get_config_models()
-    ## assign("config_", config_, envir = .GlobalEnv)
+      ## Update the candidates dropdown
+      candidates <- get_candidates_to_select_from(data_meta, "domain_name")
+      updateSelectInput(
+        inputId = paste0(data_meta$data_type, "_", data_meta$data_scale,  "_model_choice"),
+        choices = c("all", sort(unique(candidates)))
+      )
+      file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
+                  file2 = config_$dashboard_log)
+      process_ui_end(data_meta, "run_prepare_nrm")
+      timer_observer$destroy()
+    }
+  }) 
+  ## config_$models <- get_config_models()
+  ## assign("config_", config_, envir = .GlobalEnv)
 }
 run_prepare_sector <- function() {
   ids <- get_dashboard_tab_ids()  
@@ -1522,11 +1560,12 @@ run_prepare_sector <- function() {
       if (!is.null(tbl)) {
         make_dashboard_table(tbl, ids) 
       }
-      ## build_summary_data(data_meta)
-      ## tbl <- get_table_data(input$sql_tbl_choice, data_meta)
-      ## if (!is.null(tbl)) {
-      ##   make_dashboard_table(tbl, ids) 
-      ## }
+      ## Update the candidates dropdown
+      candidates <- get_candidates_to_select_from(data_meta, "domain_name")
+      updateSelectInput(
+        inputId = paste0(data_meta$data_type, "_", data_meta$data_scale,  "_model_choice"),
+        choices = c("all", sort(unique(candidates)))
+      )
       file.append(file1 = gsub(".log", ".old", config_$dashboard_log),
                   file2 = config_$dashboard_log)
       process_ui_end(data_meta, "run_prepare_sector")

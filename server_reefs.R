@@ -1,4 +1,5 @@
 
+## alert("At the start of server_reefs.R")
 
 reefs_tab_lookup <- list(
   "Photo-transects" =  list(
@@ -40,6 +41,7 @@ reefs_tab_lookup <- list(
   )
 )
 
+## alert("getting candidates")
 observeEvent(input$run_reef_refresh, {
   tab_name <- input$reefs_panel
   tab_id <- reefs_tab_lookup[[tab_name]]$outputId
@@ -59,7 +61,7 @@ observeEvent(input$run_reef_refresh, {
 }
 )
 
-
+  
 observeEvent(input$reefs_panel, {     ## when change panels
   tab_name <- input$reefs_panel
   tab_id <- reefs_tab_lookup[[tab_name]]$outputId
@@ -68,6 +70,7 @@ observeEvent(input$reefs_panel, {     ## when change panels
                                        data_type,
                                        scale = "reef",
                                        domain = NULL) 
+  ## alert(current_candidates)
  ## alert(reefs_tab_lookup[[tab_name]]$data_type)
   write_csv(current_candidates, file = paste0(config_$data_path, "AAAA.csv")) 
   ## Render the content of the panel
@@ -229,6 +232,7 @@ observeEvent(input$reefs_panel, {     ## when change panels
   observeEvent(c(input[[paste0(tab_id, "_reefs_selector")]]), {
   ## tab_name <- input$reefs_panel
     reefs_selector <- input[[paste0(tab_id, "_reefs_selector")]]
+    ## alert(reefs_selector)
     data_type <- reefs_tab_lookup[[tab_name]]$data_type
     current_candidates <- get_candidates(tab_name, data_type,
                                          scale = "reef",
@@ -495,7 +499,8 @@ observeEvent(input$reefs_panel, {     ## when change panels
               mutate(AIMS_REEF_NAME = reefs_selector,
                      GROUP = group_selector,
                      DEPTH = depth_selector,
-                     FAMILY = reefs_tab_lookup[[tab_name]]$family) |>
+                     FAMILY = family_type) |>
+                     ## FAMILY = reefs_tab_lookup[[tab_name]]$family) |>
                      ## FAMILY = ifelse(exists(family_type),
                      ##             family_type,
                      ##             reefs_tab_lookup[[tab_name]]$family )) |>
@@ -558,13 +563,13 @@ observeEvent(input$reefs_panel, {     ## when change panels
       ## alert(file_str_data_body)
       if (reefs_selector != "All Reefs") {
         nm <- paste0(file_str_data_path, file_str_data_body, "year_sum", ".rds")
-        ## alert(nm)
         if (length(input[[paste0(tab_id, "_group_selector")]]) > 0) {
           if(file.exists(nm)) {
             data <- readRDS(file = nm)
             data <- data |>
               mutate(AIMS_REEF_NAME = reefs_selector) |> 
               left_join(raw_bits, by = "AIMS_REEF_NAME")
+            ## alert(data$FAMILY)
             ## ## get the model metadata from the models database table
             ## add_data <- get_candidates(tab_name, data_type, scale = "reef") |> 
             ##   filter(selected_flag == 1) |>
@@ -628,6 +633,7 @@ observeEvent(input$reefs_panel, {     ## when change panels
                         group, family_type, reef_zone, depth,
                         shelf, model_type, sub_model, nm
                         )
+        ## alert(add_data$data_type)
         output[[paste0(tab_id, "_annual_tbl")]] <- NULL
         ## output[[paste0(tab_id, "_annual_tbl")]] <- reactable::renderReactable({
         ##   ## reactable(add_data3)
@@ -643,12 +649,30 @@ observeEvent(input$reefs_panel, {     ## when change panels
           },
           content = function(file) {
             add_data_2 <- add_data |> 
-              mutate(dat =  map(.x = nm,
+              mutate(dat =  map2(.x = nm, .y = reef_zone,
                                 .f = ~ {
                                   if (!file.exists(.x)) return(NULL)
-                                  readRDS(.x)
+                                  x <- readRDS(.x)
+                                  ## This is a hack, but it
+                                  ## essentially puts the P_CODE back
+                                  ## on for reef level models
+                                  .z <- gsub("(.*data/)modelled/([^_]*)_([^_]*)_([^_]*).*",
+                                             "\\1processed/\\2_\\3_\\4.rds",
+                                             .x)
+                                  if (file.exists(.z)) {
+                                    .y <- ifelse(.y == " ", "_", .y)
+                                    y <- readRDS(.z) |>
+                                      filter(REEF_ZONE == .y)
+                                    x <- x |>
+                                      mutate(P_CODE = unique(y$P_CODE),
+                                             SHELF = unique(y$SHELF),
+                                             SECTOR = unique(y$SECTOR)
+                                             )
+                                  }
+                                  x |> dplyr::select(P_CODE, everything())
                                 })) |>
-              unnest(dat)  
+              unnest(dat) |>
+              dplyr::select(-shelf)
             write_csv(add_data_2, file)
           }
         )
@@ -741,24 +765,73 @@ observeEvent(input$reefs_panel, {     ## when change panels
           },
           content = function(file) {
             add_data2_2 <- add_data2 |> 
-              mutate(dat =  map(.x = nm, .f = ~readRDS(.x))) |>
-              unnest(dat)  
+              ## mutate(dat =  map(.x = nm, .f = ~readRDS(.x))) |>
+              mutate(dat =  map2(.x = nm, .y = reef_zone,
+                                .f = ~ {
+                                  if (!file.exists(.x)) return(NULL)
+                                  x <- readRDS(.x)
+                                  ## This is a hack, but it
+                                  ## essentially puts the P_CODE back
+                                  ## on for reef level models
+                                  .z <- gsub("(.*data/)modelled/([^_]*)_([^_]*)_([^_]*).*",
+                                             "\\1processed/\\2_\\3_\\4.rds",
+                                             .x)
+                                  if (file.exists(.z)) {
+                                    .y <- ifelse(.y == " ", "_", .y)
+                                    y <- readRDS(.z) |> filter(REEF_ZONE == .y)
+                                    x <- x |>
+                                      mutate(P_CODE = unique(y$P_CODE),
+                                             SHELF = unique(y$SHELF),
+                                             SECTOR = unique(y$SECTOR)
+                                             )
+                                  }
+                                  x |> dplyr::select(P_CODE, everything())
+                                })) |>
+              unnest(dat) |>
+              dplyr::select(-shelf)
             write_csv(add_data2_2 |> dplyr::select(-nm), file)
           }
         )
+        ## alert(data_path)
+           ## ##===================        
+           ##  add_data2_3 <- add_data2 |> 
+           ##    mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
+           ##                      .f = ~readRDS(.x))) |>
+           ##    unnest(dat)  |>
+           ##    dplyr::select(-nm)
+           ##  local <- reactiveValues(data = add_data2_3,
+           ##                      export_file = NULL)
+           ##  observeEvent(local$data,{
+           ##    out <- tempfile(fileext = ".csv")
+           ##    write.csv(x = local$data,file = out)
+           ##    local$export_file <- out
+           ##  })
+           ## ## ========================
+
         output[[paste0(tab_id, "_annual_group_download_data_posteriors")]] <- downloadHandler(
           filename = function() {
             paste0(gsub("sum.rds", "annual_group_posteriors.csv",
                         gsub("__([^_]*)_.*", "__\\1_", basename(nm2_2))))
           },
           content = function(file) {
+            ## file.copy(from = local$export_file,
+            ##           to = file)
+            
             add_data2_3 <- add_data2 |> 
               mutate(dat =  map(.x = gsub("sum.rds", "posteriors.rds", nm),
                                 .f = ~readRDS(.x))) |>
               unnest(dat)  |>
               dplyr::select(-nm)
+            ## write_csv(add_data2_3, paste0(data_path, "/test_zip.csv"))
+            ## alert(data_path)
+            ## alert(file)
             write_csv(add_data2_3, file)
-          }
+            ## write_csv(add_data2_3, paste0(data_path, "/test_zip.csv"))
+            ## cp(paste0(data_path, "/test_zip.csv"), file)
+            ## alert(file.size(file))
+            ## zip::zip(gsub("csv", "zip"), file, files = add_data_3b, mode = "cherry-pick")
+          }## ,
+          ## contentType = "application/octet-stream"
         )
       }
 
@@ -855,6 +928,7 @@ observeEvent(input$reefs_panel, {     ## when change panels
               unnest(dat)  |>
               dplyr::select(-nm)
             write_csv(add_data_3b, file)
+            ## zip(add_data_3b, file)
           }
         )
       }
@@ -1116,3 +1190,6 @@ make_table <- function(data, type = "annual") {
     )
 }
 
+
+if (1 == 2) {
+}
