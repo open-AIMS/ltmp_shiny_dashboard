@@ -704,7 +704,8 @@ observeEvent(input$reefs_panel, {     ## when change panels
             data2 <- readRDS(file = nm2)
             data2 <- data2 |>
               mutate(AIMS_REEF_NAME = reefs_selector) |> 
-              left_join(raw_bits |> dplyr::select(-GROUP), by = "AIMS_REEF_NAME")
+              left_join(raw_bits |> dplyr::select(-GROUP), by = "AIMS_REEF_NAME") |>
+              mutate(across(c(median, mean, lower, upper), ~ format(round(.x, 4), scientific = FALSE)))
             output[[paste0(tab_id, "_annual_group_tbl")]] <- reactable::renderReactable({
               make_table(data2, type = "annual_group")
             })
@@ -788,7 +789,8 @@ observeEvent(input$reefs_panel, {     ## when change panels
                                   x |> dplyr::select(P_CODE, everything())
                                 })) |>
               unnest(dat) |>
-              dplyr::select(-shelf)
+              dplyr::select(-shelf) |>
+              mutate(across(c(median, mean, lower, upper), ~ format(round(.x, 4), scientific = FALSE)))
             write_csv(add_data2_2 |> dplyr::select(-nm), file)
           }
         )
